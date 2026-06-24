@@ -871,6 +871,7 @@ input[type=number] { -moz-appearance: textfield; }
       <button class="nav-btn" onclick="go('settle')">Settle Up</button>
       <button class="nav-btn" onclick="go('members')">Members</button>
     </nav>
+    <div id="sync-dot" title="Synced" style="width:8px;height:8px;border-radius:50%;background:#2D7A4F;flex-shrink:0;transition:background 0.3s;"></div>
     <div class="user-pill" id="user-pill" onclick="switchUser()" title="Switch user">
       <div class="user-pill-avatar" id="user-pill-avatar"></div>
       <span class="user-pill-name" id="user-pill-name"></span>
@@ -1143,6 +1144,72 @@ let members     = ld('rm_members',     DEF_MEMBERS);
 let expenses    = ld('rm_expenses',    []);
 let settlements = ld('rm_settlements', []);
 
+// ── Firebase / Firestore ──
+const _fbApp = firebase.initializeApp({
+  apiKey: "AIzaSyCc5lqoZ4KGWjduN0vtvEnfjT444J3pdl4",
+  authDomain: "room-expenses-d5ba4.firebaseapp.com",
+  projectId: "room-expenses-d5ba4",
+  storageBucket: "room-expenses-d5ba4.firebasestorage.app",
+  messagingSenderId: "853472769367",
+  appId: "1:853472769367:web:2ff300ee4c92ef94dcfa12"
+});
+const _db  = firebase.firestore();
+const _DOC = _db.collection('rooms').doc('main');
+
+function setSyncStatus(state) {
+  let el = document.getElementById('sync-dot');
+  if (!el) return;
+  const map = { syncing:'#E8A020', ok:'#2D7A4F', error:'#B33030' };
+  el.style.background = map[state] || map.ok;
+  el.title = state === 'syncing' ? 'Syncing…' : state === 'error' ? 'Sync error' : 'Synced';
+}
+
+function persistData() {
+  sv('rm_members', members);
+  sv('rm_expenses', expenses);
+  sv('rm_settlements', settlements);
+  setSyncStatus('syncing');
+  _DOC.set({ members, expenses, settlements })
+    .then(() => setSyncStatus('ok'))
+    .catch(() => setSyncStatus('error'));
+}
+
+let _ignoreNext = false;
+function startSync() {
+  _DOC.get().then(snap => {
+    if (snap.exists) {
+      const d = snap.data();
+      members     = d.members     || DEF_MEMBERS;
+      expenses    = d.expenses    || [];
+      settlements = d.settlements || [];
+      sv('rm_members', members); sv('rm_expenses', expenses); sv('rm_settlements', settlements);
+      buildLoginGrid();
+      renderDash(); renderAddForm();
+    } else {
+      // First time: push current localStorage data to Firestore
+      persistData();
+    }
+    setSyncStatus('ok');
+  }).catch(() => setSyncStatus('error'));
+
+  _DOC.onSnapshot(snap => {
+    if (!snap.exists || snap.metadata.hasPendingWrites) return;
+    const d = snap.data();
+    members     = d.members     || DEF_MEMBERS;
+    expenses    = d.expenses    || [];
+    settlements = d.settlements || [];
+    sv('rm_members', members); sv('rm_expenses', expenses); sv('rm_settlements', settlements);
+    // Re-render active section
+    const sec = document.querySelector('.section.active')?.id;
+    if (sec === 'sec-dashboard') renderDash();
+    else if (sec === 'sec-history') renderHistory();
+    else if (sec === 'sec-settle') renderSettle();
+    else if (sec === 'sec-members') renderMembers();
+    buildLoginGrid();
+    setSyncStatus('ok');
+  }, () => setSyncStatus('error'));
+}
+
 const uid  = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 const td   = () => new Date().toISOString().slice(0,10);
 const init = n  => n.trim().split(/\s+/).map(w => w[0]?.toUpperCase()||'').join('').slice(0,2) || '?';
@@ -1338,7 +1405,7 @@ function resetAddForm() {
 function undoLastExpense() {
   if (!expenses.length) return toast('Nothing to undo.', 'error');
   const removed = expenses.shift();
-  sv('rm_expenses', expenses);
+  persistData();
   document.getElementById('success-banner').classList.remove('show');
   setUndoState(false);
   toast(`"${removed.desc}" removed.`);
@@ -1385,7 +1452,7 @@ function addExpense() {
 
   expenses.unshift({id:uid(), desc, amount, paidBy, category, date, splitAmong,
     splitType: splitMode, ...(splitMode === 'custom' ? {customSplits} : {})});
-  sv('rm_expenses', expenses);
+  persistData();
 
   document.getElementById('success-title').textContent  = `✓ "${desc}" added!`;
   document.getElementById('success-detail').textContent = detailText;
@@ -1443,7 +1510,7 @@ function renderHistory() {
 function delExpense(id) {
   if (!confirm('Delete this expense?')) return;
   expenses = expenses.filter(e => e.id !== id);
-  sv('rm_expenses', expenses);
+  persistData();
   renderHistory();
   toast('Expense deleted.');
 }
@@ -1477,7 +1544,7 @@ function addSettlement() {
   if (!amount || amount <= 0) return toast('Please enter a valid amount.','error');
 
   settlements.unshift({id:uid(), from, to, amount, date});
-  sv('rm_settlements', settlements);
+  persistData();
   document.getElementById('sett-amount').value = '';
   toast(`${from} → ${to}: ${fmt(amount)} settled!`, 'success');
   renderSettle();
@@ -1506,7 +1573,7 @@ function updatePreview(i) {
 function addMember() {
   if (members.length >= 12) return toast('Maximum 12 members allowed.','error');
   members.push(`Member ${members.length + 1}`);
-  sv('rm_members', members);
+  persistData();
   renderMembers();
   const last = members.length - 1;
   const inp = document.getElementById('mf'+last);
@@ -1522,7 +1589,7 @@ function removeMember(i) {
     if (!confirm(`"${name}" has existing expenses/settlements. Remove anyway? Their records will remain but show the old name.`)) return;
   }
   members.splice(i, 1);
-  sv('rm_members', members);
+  persistData();
   renderMembers();
   toast(`"${name}" removed.`);
 }
@@ -1540,9 +1607,7 @@ function saveMembers() {
     settlements = settlements.map(s => ({...s, from:s.from===old?neu:s.from, to:s.to===old?neu:s.to}));
   });
   members = newM;
-  sv('rm_members', members);
-  sv('rm_expenses', expenses);
-  sv('rm_settlements', settlements);
+  persistData();
   toast('Member names saved! ✓', 'success');
   renderMembers();
 }
@@ -1550,8 +1615,7 @@ function saveMembers() {
 function clearData() {
   if (!confirm('Delete ALL expenses and settlements? Member names will be kept.')) return;
   expenses = []; settlements = [];
-  sv('rm_expenses', expenses);
-  sv('rm_settlements', settlements);
+  persistData();
   toast('All data cleared.');
 }
 
@@ -1922,7 +1986,7 @@ function confirmImport() {
   } else {
     expenses = [...importedRows, ...expenses];
   }
-  sv('rm_expenses', expenses);
+  persistData();
   closeImportModal();
   renderHistory();
   renderDash();
@@ -1938,6 +2002,7 @@ function escHtml(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;'
 renderDash();
 renderAddForm();
 buildLoginGrid();
+startSync();
 try {
   const savedUser = sessionStorage.getItem('rm_user');
   if (savedUser && members.includes(savedUser)) {
@@ -1949,5 +2014,7 @@ try {
 } catch(e) {}
 </script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 </body>
 </html>
