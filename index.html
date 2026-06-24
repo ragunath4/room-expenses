@@ -1638,6 +1638,7 @@ const uid  = () => Date.now().toString(36) + Math.random().toString(36).slice(2)
 const td   = () => new Date().toISOString().slice(0,10);
 const init = n  => n.trim().split(/\s+/).map(w => w[0]?.toUpperCase()||'').join('').slice(0,2) || '?';
 const fmt  = n  => '₹' + Math.abs(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+const fmtDate = s => { if (!s) return ''; const d = new Date(s + 'T00:00:00'); return isNaN(d) ? s : `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')} ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]}`; };
 const col  = i  => COLORS[i % COLORS.length];
 
 function avEl(name, idx, size=34, extra='') {
@@ -2284,7 +2285,7 @@ function renderPersonalDash() {
             html += `<div class="pcard-exp-row${ei >= 5 ? ' pcard-exp-hidden' : ''}">
               <span class="pcard-exp-cat">${escHtml(e.cat)}</span>
               <span class="pcard-exp-desc">${escHtml(e.desc)}</span>
-              <span class="pcard-exp-date">${escHtml(e.date)}</span>
+              <span class="pcard-exp-date">${fmtDate(e.date)}</span>
               <span class="pcard-exp-share pcard-exp-share-pay">-${fmt(e.share)}</span>
             </div>`;
           });
@@ -2297,7 +2298,7 @@ function renderPersonalDash() {
             html += `<div class="pcard-exp-row pcard-exp-row-offset${ei >= 5 ? ' pcard-exp-hidden' : ''}">
               <span class="pcard-exp-cat">${escHtml(e.cat)}</span>
               <span class="pcard-exp-desc">${escHtml(e.desc)}</span>
-              <span class="pcard-exp-date">${escHtml(e.date)}</span>
+              <span class="pcard-exp-date">${fmtDate(e.date)}</span>
               <span class="pcard-exp-share pcard-exp-share-rec">+${fmt(e.share)}</span>
             </div>`;
           });
@@ -2332,7 +2333,7 @@ function renderPersonalDash() {
           html += `<div class="pcard-exp-row${ei >= 5 ? ' pcard-exp-hidden' : ''}">
             <span class="pcard-exp-cat">${escHtml(e.cat)}</span>
             <span class="pcard-exp-desc">${escHtml(e.desc)}</span>
-            <span class="pcard-exp-date">${escHtml(e.date)}</span>
+            <span class="pcard-exp-date">${fmtDate(e.date)}</span>
             <span class="pcard-exp-share pcard-exp-share-rec">+${fmt(e.share)}</span>
           </div>`;
         });
