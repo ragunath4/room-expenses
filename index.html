@@ -1007,12 +1007,19 @@ input[type=number] { -moz-appearance: textfield; }
 .pcard-exp-share-rec { color: var(--success); }
 .pcard-exp-more { font-size: 11px; color: var(--text2); padding: 3px 9px; font-style: italic; }
 .pcard-group-label {
+  display: flex; align-items: center; justify-content: space-between;
   font-size: 10px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.6px; color: var(--danger); opacity: 0.7;
+  letter-spacing: 0.6px; color: var(--danger); opacity: 0.8;
   padding: 6px 2px 3px;
 }
 .pcard-group-label-rec { color: var(--success); }
+.pcard-group-total { font-family: var(--font-mono); font-size: 11px; font-weight: 700; }
+.pcard-group-total-pay { color: var(--danger); }
+.pcard-group-total-rec { color: var(--success); }
 .pcard-exp-row-offset { background: var(--success-bg, rgba(45,122,79,0.08)); }
+.pcard-exp-hidden { display: none; }
+.pcard-exp-more { cursor: pointer; text-decoration: underline; }
+.pcard-exp-more:hover { color: var(--accent); }
 .pcard-all-clear {
   display: flex; flex-direction: column; align-items: center;
   padding: 28px 18px; gap: 8px; text-align: center;
@@ -2200,28 +2207,30 @@ function renderPersonalDash() {
       if (d.exps.length || d.offsets.length) {
         html += `<div class="pcard-exps">`;
         if (d.exps.length) {
-          html += `<div class="pcard-group-label">You owe for</div>`;
-          d.exps.slice(0, 5).forEach(e => {
-            html += `<div class="pcard-exp-row">
+          const expsTotal = d.exps.reduce((s, e) => s + e.share, 0);
+          html += `<div class="pcard-group-label"><span>You owe for</span><span class="pcard-group-total pcard-group-total-pay">-${fmt(expsTotal)}</span></div>`;
+          d.exps.forEach((e, ei) => {
+            html += `<div class="pcard-exp-row${ei >= 5 ? ' pcard-exp-hidden' : ''}">
               <span class="pcard-exp-cat">${escHtml(e.cat)}</span>
               <span class="pcard-exp-desc">${escHtml(e.desc)}</span>
               <span class="pcard-exp-date">${escHtml(e.date)}</span>
               <span class="pcard-exp-share pcard-exp-share-pay">-${fmt(e.share)}</span>
             </div>`;
           });
-          if (d.exps.length > 5) html += `<div class="pcard-exp-more">+ ${d.exps.length - 5} more</div>`;
+          if (d.exps.length > 5) html += `<div class="pcard-exp-more" onclick="expandGroup(this)">+ ${d.exps.length - 5} more</div>`;
         }
         if (d.offsets.length) {
-          html += `<div class="pcard-group-label pcard-group-label-rec">They owe you for</div>`;
-          d.offsets.slice(0, 5).forEach(e => {
-            html += `<div class="pcard-exp-row pcard-exp-row-offset">
+          const offTotal = d.offsets.reduce((s, e) => s + e.share, 0);
+          html += `<div class="pcard-group-label pcard-group-label-rec"><span>They owe you for</span><span class="pcard-group-total pcard-group-total-rec">+${fmt(offTotal)}</span></div>`;
+          d.offsets.forEach((e, ei) => {
+            html += `<div class="pcard-exp-row pcard-exp-row-offset${ei >= 5 ? ' pcard-exp-hidden' : ''}">
               <span class="pcard-exp-cat">${escHtml(e.cat)}</span>
               <span class="pcard-exp-desc">${escHtml(e.desc)}</span>
               <span class="pcard-exp-date">${escHtml(e.date)}</span>
               <span class="pcard-exp-share pcard-exp-share-rec">+${fmt(e.share)}</span>
             </div>`;
           });
-          if (d.offsets.length > 5) html += `<div class="pcard-exp-more">+ ${d.offsets.length - 5} more</div>`;
+          if (d.offsets.length > 5) html += `<div class="pcard-exp-more" onclick="expandGroup(this)">+ ${d.offsets.length - 5} more</div>`;
         }
         html += `</div>`;
       }
@@ -2264,6 +2273,12 @@ function renderPersonalDash() {
   }
 
   wrap.innerHTML = html;
+}
+
+function expandGroup(btn) {
+  const exps = btn.parentElement;
+  exps.querySelectorAll('.pcard-exp-hidden').forEach(r => r.classList.remove('pcard-exp-hidden'));
+  btn.remove();
 }
 
 function quickSettle(i) {
