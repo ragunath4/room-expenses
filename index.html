@@ -1447,6 +1447,7 @@ input[type=number] { -moz-appearance: textfield; }
       <div class="drawer-section-title">Needs to Pay</div>
       <div id="pd-owes"></div>
     </div>
+    <div id="pd-undo-settle"></div>
     <div class="drawer-section" id="pd-owed-sec">
       <div class="drawer-section-title">Will Receive</div>
       <div id="pd-owed"></div>
@@ -2110,6 +2111,18 @@ function openProfile(name) {
     owesSec.style.display = 'none';
   }
 
+  // Undo last settle button
+  const lastSettle = settlements.find(s => s.from === name || s.to === name);
+  const undoSettleEl = document.getElementById('pd-undo-settle');
+  if (lastSettle) {
+    const dir = lastSettle.from === name
+      ? `You paid ${escHtml(lastSettle.to)}`
+      : `${escHtml(lastSettle.from)} paid you`;
+    undoSettleEl.innerHTML = `<button class="pd-undo-btn" style="margin:0 0 14px;" onclick="undoLastSettleFromDrawer()">↩ Undo Last Settle: ${dir} ${fmt(lastSettle.amount)}</button>`;
+  } else {
+    undoSettleEl.innerHTML = '';
+  }
+
   const owedEl  = document.getElementById('pd-owed');
   const owedSec = document.getElementById('pd-owed-sec');
   if (owed.length) {
@@ -2133,8 +2146,7 @@ function openProfile(name) {
   if (!_pdExp.length) {
     expEl.innerHTML = '<div style="font-size:13px;color:var(--text2);padding:10px 0;">No expenses yet.</div>';
   } else {
-    const undoRow = `<button class="pd-undo-btn" onclick="undoLastExpFromDrawer()">↩ Undo Last Expense: "${escHtml(_pdExp[0].desc)}"</button>`;
-    expEl.innerHTML = undoRow + _pdExp.map((e, i) => {
+    expEl.innerHTML = _pdExp.map((e, i) => {
       const paid = e.paidBy === name;
       const isCustom = e.splitType === 'custom' && e.customSplits;
       const share = isCustom ? (e.customSplits[name] || 0) : (e.splitAmong?.length ? e.amount / e.splitAmong.length : e.amount);
@@ -2167,6 +2179,29 @@ function settleDebt(i) {
   persistData();
   toast(`${d.from} → ${d.to}: ${fmt(d.amount)} settled! ✓`, 'success');
   openProfile(_pdName);
+  // Keep view on the debts section after re-render
+  setTimeout(() => {
+    const sec = document.getElementById('pd-owes-sec');
+    const drawer = document.getElementById('profile-drawer');
+    if (sec && drawer) drawer.scrollTop = sec.offsetTop - 60;
+  }, 30);
+  renderDash();
+}
+
+function undoLastSettleFromDrawer() {
+  const idx = settlements.findIndex(s => s.from === _pdName || s.to === _pdName);
+  if (idx === -1) return toast('No settlement to undo.', 'error');
+  const s = settlements[idx];
+  if (!confirm(`Undo: ${s.from} → ${s.to} (${fmt(s.amount)})?`)) return;
+  settlements.splice(idx, 1);
+  persistData();
+  toast('Settlement undone.', 'success');
+  openProfile(_pdName);
+  setTimeout(() => {
+    const sec = document.getElementById('pd-owes-sec');
+    const drawer = document.getElementById('profile-drawer');
+    if (sec && drawer) drawer.scrollTop = sec.offsetTop - 60;
+  }, 30);
   renderDash();
 }
 
