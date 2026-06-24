@@ -352,6 +352,7 @@ select { cursor: pointer; }
 .expense-desc { font-weight: 700; font-size: 15px; }
 .expense-meta { font-size: 12px; color: var(--text2); margin-top: 2px; }
 .expense-split { font-size: 11px; color: var(--text2); margin-top: 2px; }
+.pf-sync-badge { font-size: 10px; font-weight: 700; color: var(--accent); background: var(--accent-light); border: 1px solid var(--accent-border, var(--border)); border-radius: 8px; padding: 1px 6px; margin-left: 4px; vertical-align: middle; }
 .expense-right { text-align: right; flex-shrink: 0; }
 .expense-amount { font-family: var(--font-mono); font-size: 16px; font-weight: 500; }
 .expense-per { font-family: var(--font-mono); font-size: 11px; color: var(--text2); margin-top: 2px; }
@@ -1559,6 +1560,11 @@ const _fbApp = firebase.initializeApp({
 const _db  = firebase.firestore();
 const _DOC = _db.collection('rooms').doc('main');
 
+// ── Personal Finance Sync ──
+// Change this to match your exact member name in the room app
+const PERSONAL_SYNC_USER = 'Ragu';
+const _PF_DOC = _db.collection('personal-finance').doc('main');
+
 function setSyncStatus(state) {
   let el = document.getElementById('sync-dot');
   if (!el) return;
@@ -1846,6 +1852,66 @@ function setUndoState(enabled) {
   btn.style.opacity = enabled ? '1' : '0.5';
 }
 
+// ── Personal Finance Sync Functions ──
+function forwardToPersonal(expense) {
+  if (!expense || expense.paidBy !== PERSONAL_SYNC_USER) return;
+  if (!expense.splitAmong?.length) return;
+
+  const myShare  = getShare(expense, PERSONAL_SYNC_USER);
+  const lentAmt  = +(expense.amount - myShare).toFixed(2);
+  const adds     = [];
+
+  if (myShare > 0.005) {
+    adds.push({
+      id: 'rm_' + expense.id + '_e',
+      type: 'expense',
+      amount: +myShare.toFixed(2),
+      date: expense.date,
+      purpose: (expense.desc || '') + ' · Room',
+      category: 'Room',
+      subcategory: '',
+      createdAt: Date.now(),
+      _src: 'room'
+    });
+  }
+  if (lentAmt > 0.005) {
+    adds.push({
+      id: 'rm_' + expense.id + '_d',
+      type: 'debt',
+      amount: lentAmt,
+      date: expense.date,
+      purpose: (expense.desc || '') + ' · Room split',
+      debtDirection: 'lent',
+      debtPerson: 'Roommates',
+      debtDueDate: '',
+      debtRepaid: 0,
+      debtStatus: 'pending',
+      createdAt: Date.now(),
+      _src: 'room',
+      _rmId: expense.id
+    });
+  }
+
+  if (!adds.length) return;
+  _PF_DOC.update({
+    transactions: firebase.firestore.FieldValue.arrayUnion(...adds)
+  }).catch(() => {});
+}
+
+async function removeFromPersonal(expId) {
+  try {
+    const snap = await _PF_DOC.get();
+    if (!snap.exists) return;
+    const all      = snap.data().transactions || [];
+    const filtered = all.filter(t =>
+      t.id !== 'rm_' + expId + '_e' && t.id !== 'rm_' + expId + '_d'
+    );
+    if (filtered.length !== all.length) {
+      await _PF_DOC.update({ transactions: filtered });
+    }
+  } catch(e) {}
+}
+
 function addExpense() {
   const desc     = document.getElementById('exp-desc').value.trim();
   const amount   = parseFloat(document.getElementById('exp-amount').value);
@@ -1877,9 +1943,11 @@ function addExpense() {
     detailText = `${fmt(amount)} paid by ${paidBy} · ${fmt(share)} each among ${splitAmong.length} member${splitAmong.length>1?'s':''}`;
   }
 
-  expenses.unshift({id:uid(), desc, amount, paidBy, category, date, splitAmong,
-    splitType: splitMode, ...(splitMode === 'custom' ? {customSplits} : {})});
+  const newExp = {id:uid(), desc, amount, paidBy, category, date, splitAmong,
+    splitType: splitMode, ...(splitMode === 'custom' ? {customSplits} : {})};
+  expenses.unshift(newExp);
   persistData();
+  forwardToPersonal(newExp);
 
   document.getElementById('success-title').textContent  = `✓ "${desc}" added!`;
   document.getElementById('success-detail').textContent = detailText;
@@ -1922,7 +1990,7 @@ function renderHistory() {
       <div class="expense-icon">${e.category||'📦'}</div>
       <div class="expense-info">
         <div class="expense-desc">${escHtml(e.desc)}</div>
-        <div class="expense-meta">Paid by <span style="color:${c.fg};font-weight:700">${e.paidBy}</span> · ${e.date||''}</div>
+        <div class="expense-meta">Paid by <span style="color:${c.fg};font-weight:700">${e.paidBy}</span> · ${e.date||''}${e.paidBy === PERSONAL_SYNC_USER ? ' <span class="pf-sync-badge" title="Synced to Personal Finance">🔗 Personal</span>' : ''}</div>
         <div class="expense-split">${splitDetail}</div>
       </div>
       <div class="expense-right">
@@ -1936,8 +2004,10 @@ function renderHistory() {
 
 function delExpense(id) {
   if (!confirm('Delete this expense?')) return;
+  const exp = expenses.find(e => e.id === id);
   expenses = expenses.filter(e => e.id !== id);
   persistData();
+  if (exp) removeFromPersonal(exp.id);
   renderHistory();
   renderDash();
   toast('Expense deleted.');
@@ -2748,11 +2818,15 @@ function saveEdit() {
 
   const idx = expenses.findIndex(x => x.id === _editId);
   if (idx === -1) return;
-  expenses[idx] = { ...expenses[idx], desc, amount, paidBy, category, date, splitAmong,
+  const oldExp = expenses[idx];
+  expenses[idx] = { ...oldExp, desc, amount, paidBy, category, date, splitAmong,
     splitType: _editSplitMode, ...(_editSplitMode==='custom' ? {customSplits} : {customSplits: undefined}) };
   if (_editSplitMode !== 'custom') delete expenses[idx].customSplits;
 
   persistData();
+  // Re-sync: remove old forwarded entries, forward updated version
+  if (oldExp.paidBy === PERSONAL_SYNC_USER) removeFromPersonal(oldExp.id);
+  forwardToPersonal(expenses[idx]);
   closeEditModal();
   renderHistory();
   renderDash();
@@ -2764,6 +2838,7 @@ function deleteFromEdit() {
   if (!e || !confirm(`Delete "${e.desc}"?`)) return;
   expenses = expenses.filter(x => x.id !== _editId);
   persistData();
+  removeFromPersonal(e.id);
   closeEditModal();
   renderHistory();
   renderDash();
