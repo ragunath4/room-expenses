@@ -280,8 +280,16 @@ select { cursor: pointer; }
   text-align: center;
   user-select: none;
 }
-.split-label:hover { border-color: var(--accent-border); background: var(--accent-light); }
+/* unchecked — muted look */
+.split-check:not(:checked) + .split-label { background: var(--surface2); border-color: var(--border); }
+.split-check:not(:checked) + .split-label .split-avatar { filter: grayscale(0.75); opacity: 0.5; }
+.split-check:not(:checked) + .split-label .split-name { color: var(--text2); }
+.split-check:not(:checked) + .split-label:hover { border-color: var(--border-strong); background: var(--surface2); }
+/* checked — full color with accent ring */
 .split-check:checked + .split-label { border-color: var(--accent); background: var(--accent-light); }
+.split-check:checked + .split-label .split-avatar { filter: none; opacity: 1; }
+.split-check:checked + .split-label .split-name { color: var(--text); }
+.split-check:checked + .split-label:hover { border-color: var(--accent); background: #FDF0D5; }
 .split-avatar {
   width: 30px;
   height: 30px;
@@ -348,19 +356,20 @@ select { cursor: pointer; }
 .expense-amount { font-family: var(--font-mono); font-size: 16px; font-weight: 500; }
 .expense-per { font-family: var(--font-mono); font-size: 11px; color: var(--text2); margin-top: 2px; }
 .del-btn {
-  background: none;
-  border: none;
-  color: var(--text2);
-  cursor: pointer;
-  font-size: 15px;
-  padding: 4px 6px;
-  border-radius: 4px;
-  opacity: 0.4;
+  background: none; border: none; color: var(--text2);
+  cursor: pointer; font-size: 15px; padding: 4px 6px;
+  border-radius: 4px; opacity: 0.4;
   transition: opacity 0.15s, color 0.15s;
-  line-height: 1;
-  flex-shrink: 0;
+  line-height: 1; flex-shrink: 0;
 }
 .del-btn:hover { opacity: 1; color: var(--danger); }
+.edit-btn {
+  background: none; border: none; color: var(--text2);
+  cursor: pointer; font-size: 17px; padding: 4px 6px;
+  border-radius: 4px; opacity: 0.45; flex-shrink: 0;
+  transition: opacity 0.15s, color 0.15s; line-height: 1;
+}
+.edit-btn:hover { opacity: 1; color: var(--accent); }
 
 .settle-layout {
   display: grid;
@@ -1083,7 +1092,7 @@ input[type=number] { -moz-appearance: textfield; }
         <ul class="balance-list" id="balance-list"></ul>
       </div>
       <div class="card">
-        <div class="card-title">Outstanding Debts</div>
+        <div class="card-title">Pending Payments</div>
         <div id="debts-list"></div>
       </div>
     </div>
@@ -1358,6 +1367,71 @@ input[type=number] { -moz-appearance: textfield; }
   </div>
 </div>
 
+<!-- ── EDIT EXPENSE MODAL ── -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal-box" style="max-width:520px;max-height:90vh;overflow-y:auto;">
+    <div class="modal-title">Edit Expense</div>
+    <div class="modal-sub">Update the details below</div>
+    <div class="form-grid" style="margin-bottom:16px;">
+      <div class="form-group">
+        <label for="ep-desc">Description</label>
+        <input type="text" id="ep-desc" placeholder="e.g. Groceries…">
+      </div>
+      <div class="form-group">
+        <label for="ep-amount">Amount (₹)</label>
+        <input type="number" id="ep-amount" placeholder="0.00" min="0" step="0.01" oninput="if(_editSplitMode==='custom')updateEditRemaining()">
+      </div>
+      <div class="form-group">
+        <label for="ep-paidby">Paid By</label>
+        <select id="ep-paidby"></select>
+      </div>
+      <div class="form-group">
+        <label for="ep-category">Category</label>
+        <select id="ep-category">
+          <option value="🛒">🛒 Groceries</option>
+          <option value="🍽️">🍽️ Food &amp; Dining</option>
+          <option value="💡">💡 Utilities</option>
+          <option value="🌐">🌐 Internet / Wi-Fi</option>
+          <option value="🚗">🚗 Transport</option>
+          <option value="🏠">🏠 Rent / Housing</option>
+          <option value="🎮">🎮 Entertainment</option>
+          <option value="💊">💊 Medical</option>
+          <option value="🧹">🧹 Cleaning</option>
+          <option value="📦">📦 Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="ep-date">Date</label>
+        <input type="date" id="ep-date">
+      </div>
+      <div class="form-group full">
+        <label>Split Type</label>
+        <div class="split-type-toggle">
+          <button class="split-toggle-btn active" id="etoggle-equal" onclick="setEditSplitType('equal')">Equal Split</button>
+          <button class="split-toggle-btn" id="etoggle-custom" onclick="setEditSplitType('custom')">Custom Amounts</button>
+        </div>
+        <div id="edit-equal-section">
+          <div class="split-grid" id="edit-split-grid"></div>
+        </div>
+        <div id="edit-custom-section" style="display:none">
+          <div id="edit-custom-grid"></div>
+          <div class="split-remaining low" id="edit-split-remaining">
+            <span id="edit-split-remaining-text">Enter amounts above</span>
+            <span class="split-remaining-label">Remaining</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions" style="justify-content:space-between;">
+      <button class="btn btn-danger btn-sm" onclick="deleteFromEdit()">🗑 Delete</button>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-secondary btn-sm" onclick="closeEditModal()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="saveEdit()">Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ── PROFILE DRAWER ── -->
 <div class="drawer-overlay" id="drawer-overlay" onclick="closeProfile()"></div>
 <div class="drawer" id="profile-drawer" role="dialog" aria-modal="true">
@@ -1370,11 +1444,11 @@ input[type=number] { -moz-appearance: textfield; }
     <div id="pd-net" class="drawer-net"></div>
 
     <div class="drawer-section" id="pd-owes-sec">
-      <div class="drawer-section-title">They owe</div>
+      <div class="drawer-section-title">Needs to Pay</div>
       <div id="pd-owes"></div>
     </div>
     <div class="drawer-section" id="pd-owed-sec">
-      <div class="drawer-section-title">Owed to them</div>
+      <div class="drawer-section-title">Will Receive</div>
       <div id="pd-owed"></div>
     </div>
     <div class="drawer-section">
@@ -1518,13 +1592,17 @@ function netBalances() {
 function pairDebts() {
   const ow = {};
   members.forEach(a => { ow[a] = {}; members.forEach(b => ow[a][b] = 0); });
+  const ensureRow = n => { if (!ow[n]) ow[n] = {}; };
   expenses.forEach(e => {
     if (!e.splitAmong?.length) return;
     e.splitAmong.forEach(m => {
-      if (m !== e.paidBy) ow[m][e.paidBy] = (ow[m][e.paidBy]||0) + getShare(e, m);
+      if (m === e.paidBy) return;
+      ensureRow(m); ensureRow(e.paidBy);
+      ow[m][e.paidBy] = (ow[m][e.paidBy]||0) + getShare(e, m);
     });
   });
   settlements.forEach(s => {
+    ensureRow(s.from); ensureRow(s.to);
     const ab = ow[s.from][s.to] || 0;
     if (ab >= s.amount) { ow[s.from][s.to] -= s.amount; }
     else {
@@ -1575,8 +1653,8 @@ function renderDash() {
   bl.innerHTML = members.map((m,i) => {
     const n = net[m] || 0;
     const cls = n > 0.01 ? 'bal-pos' : n < -0.01 ? 'bal-neg' : 'bal-zero';
-    const label = n > 0.01 ? `+${fmt(n)} gets back` : n < -0.01 ? `-${fmt(Math.abs(n))} owes` : 'Settled up';
-    return `<li class="balance-item" onclick="openProfile('${m.replace(/'/g,"\\'")}')">
+    const label = n > 0.01 ? `+${fmt(n)} to receive` : n < -0.01 ? `-${fmt(Math.abs(n))} to pay` : 'All clear ✓';
+    return `<li class="balance-item" onclick="openProfile('${escJs(m)}')">
       ${avEl(m,i)}
       <span class="member-name">${m}</span>
       <span class="balance-amount ${cls}">${label}</span>
@@ -1590,7 +1668,7 @@ function renderDash() {
     dl.innerHTML = '<div class="empty"><div class="empty-icon">🎉</div><div class="empty-text">Everyone is settled up!</div></div>';
   } else {
     dl.innerHTML = debts.map(d => `<div class="debt-item">
-      <span class="debt-desc"><strong>${d.from}</strong> owes <strong>${d.to}</strong></span>
+      <span class="debt-desc"><strong>${escHtml(d.from)}</strong> pays <strong>${escHtml(d.to)}</strong></span>
       <span class="debt-amount">${fmt(d.amount)}</span>
     </div>`).join('');
   }
@@ -1760,8 +1838,8 @@ function renderHistory() {
     const pidx = members.indexOf(e.paidBy);
     const c = col(pidx >= 0 ? pidx : 0);
     const splitDetail = isCustom
-      ? Object.entries(e.customSplits).map(([m,a]) => `${m}: ${fmt(a)}`).join(' · ')
-      : (e.splitAmong||[]).join(', ');
+      ? Object.entries(e.customSplits).map(([m,a]) => `${escHtml(m)}: ${fmt(a)}`).join(' · ')
+      : (e.splitAmong||[]).map(escHtml).join(', ');
     const perText = isCustom
       ? `<span style="background:var(--accent-light);color:var(--accent);border:1px solid var(--accent-border);font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;text-transform:uppercase;letter-spacing:0.4px;">Custom</span>`
       : `<div class="expense-per">${fmt(share)}/each</div>`;
@@ -1776,7 +1854,7 @@ function renderHistory() {
         <div class="expense-amount">${fmt(e.amount)}</div>
         ${perText}
       </div>
-      <button class="del-btn" onclick="delExpense('${e.id}')" title="Delete expense">✕</button>
+      <button class="edit-btn" onclick="openEditModal('${e.id}')" title="Edit expense">✎</button>
     </li>`;
   }).join('');
 }
@@ -1968,8 +2046,8 @@ function renderMyCard() {
       <div class="my-card-name">${currentUser}</div>
     </div>
     <div class="my-card-badges">
-      ${totalIOwe > 0.01 ? `<div class="my-card-badge" style="background:var(--danger-bg);color:var(--danger)"><span>You owe</span>${fmt(totalIOwe)}</div>` : ''}
-      ${totalOwedMe > 0.01 ? `<div class="my-card-badge" style="background:var(--success-bg);color:var(--success)"><span>Owed to you</span>+${fmt(totalOwedMe)}</div>` : ''}
+      ${totalIOwe > 0.01 ? `<div class="my-card-badge" style="background:var(--danger-bg);color:var(--danger)"><span>You Pay</span>${fmt(totalIOwe)}</div>` : ''}
+      ${totalOwedMe > 0.01 ? `<div class="my-card-badge" style="background:var(--success-bg);color:var(--success)"><span>You Receive</span>+${fmt(totalOwedMe)}</div>` : ''}
       ${totalIOwe <= 0.01 && totalOwedMe <= 0.01 ? `<div class="my-card-badge" style="background:rgba(255,255,255,0.08);color:#8A8680"><span>Status</span>All clear ✓</div>` : ''}
     </div>
   </div>`;
@@ -1998,11 +2076,11 @@ function openProfile(name) {
   if (n > 0.01) {
     netEl.style.background = 'var(--success-bg)';
     netEl.style.border = '1px solid #A8D8BB';
-    netEl.innerHTML = `<span class="drawer-net-label" style="color:var(--success)">Total owed to them</span><span class="drawer-net-amount" style="color:var(--success)">+${fmt(n)}</span>`;
+    netEl.innerHTML = `<span class="drawer-net-label" style="color:var(--success)">Will Receive</span><span class="drawer-net-amount" style="color:var(--success)">+${fmt(n)}</span>`;
   } else if (n < -0.01) {
     netEl.style.background = 'var(--danger-bg)';
     netEl.style.border = '1px solid #F0C0C0';
-    netEl.innerHTML = `<span class="drawer-net-label" style="color:var(--danger)">Total they owe</span><span class="drawer-net-amount" style="color:var(--danger)">-${fmt(Math.abs(n))}</span>`;
+    netEl.innerHTML = `<span class="drawer-net-label" style="color:var(--danger)">Needs to Pay</span><span class="drawer-net-amount" style="color:var(--danger)">-${fmt(Math.abs(n))}</span>`;
   } else {
     netEl.style.background = 'var(--surface2)';
     netEl.style.border = '1px solid var(--border)';
@@ -2286,6 +2364,135 @@ function confirmImport() {
   const n = importedRows.length;
   toast(`${n} expense${n>1?'s':''} imported! ✓`, 'success');
   importedRows = [];
+}
+
+// ── Edit Expense Modal ──
+let _editId = null;
+let _editSplitMode = 'equal';
+
+function openEditModal(id) {
+  const e = expenses.find(x => x.id === id);
+  if (!e) return;
+  _editId = id;
+
+  document.getElementById('ep-desc').value    = e.desc || '';
+  document.getElementById('ep-amount').value  = e.amount || '';
+  document.getElementById('ep-date').value    = e.date || td();
+
+  // paidby options
+  const pb = document.getElementById('ep-paidby');
+  pb.innerHTML = members.map(m => `<option${m===e.paidBy?' selected':''}>${m}</option>`).join('');
+
+  // category
+  const cat = document.getElementById('ep-category');
+  [...cat.options].forEach(o => o.selected = o.value === e.category);
+
+  // split type
+  _editSplitMode = e.splitType || 'equal';
+  setEditSplitType(_editSplitMode, e);
+
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+function setEditSplitType(type, expData) {
+  _editSplitMode = type;
+  document.getElementById('etoggle-equal').classList.toggle('active', type === 'equal');
+  document.getElementById('etoggle-custom').classList.toggle('active', type === 'custom');
+  document.getElementById('edit-equal-section').style.display  = type === 'equal'  ? '' : 'none';
+  document.getElementById('edit-custom-section').style.display = type === 'custom' ? '' : 'none';
+
+  const e = expData || expenses.find(x => x.id === _editId);
+  if (type === 'equal') {
+    document.getElementById('edit-split-grid').innerHTML = members.map((m, i) => {
+      const c = col(i);
+      const checked = e?.splitAmong?.includes(m) ? 'checked' : '';
+      return `<div>
+        <input type="checkbox" class="split-check" id="eqs${i}" value="${m}" ${checked}>
+        <label class="split-label" for="eqs${i}">
+          <div class="split-avatar" style="background:${c.bg};color:${c.fg}">${init(m)}</div>
+          <span class="split-name">${m}</span>
+        </label>
+      </div>`;
+    }).join('');
+  } else {
+    document.getElementById('edit-custom-grid').innerHTML = members.map((m, i) => {
+      const c = col(i);
+      const val = e?.customSplits?.[m] || '';
+      return `<div class="custom-split-row">
+        <div class="custom-split-avatar" style="background:${c.bg};color:${c.fg}">${init(m)}</div>
+        <span class="custom-split-name">${escHtml(m)}</span>
+        <input type="number" class="custom-split-input" id="ecs${i}" placeholder="0.00" min="0" step="0.01" value="${val}" oninput="updateEditRemaining()">
+      </div>`;
+    }).join('');
+    updateEditRemaining();
+  }
+}
+
+function updateEditRemaining() {
+  const total = parseFloat(document.getElementById('ep-amount').value) || 0;
+  const allocated = members.reduce((s,_,i) => s + (parseFloat(document.getElementById('ecs'+i)?.value)||0), 0);
+  const rem = total - allocated;
+  const el  = document.getElementById('edit-split-remaining');
+  const txt = document.getElementById('edit-split-remaining-text');
+  if (!total)                  { el.className = 'split-remaining low';  txt.textContent = 'Enter total amount first'; }
+  else if (Math.abs(rem)<0.01) { el.className = 'split-remaining ok';   txt.textContent = '✓ All ' + fmt(total) + ' allocated'; }
+  else if (rem < 0)            { el.className = 'split-remaining over'; txt.textContent = fmt(Math.abs(rem)) + ' over total'; }
+  else                         { el.className = 'split-remaining low';  txt.textContent = fmt(rem) + ' remaining'; }
+}
+
+function saveEdit() {
+  const desc   = document.getElementById('ep-desc').value.trim();
+  const amount = parseFloat(document.getElementById('ep-amount').value);
+  const paidBy = document.getElementById('ep-paidby').value;
+  const category = document.getElementById('ep-category').value;
+  const date   = document.getElementById('ep-date').value || td();
+
+  if (!desc)                  return toast('Please enter a description.', 'error');
+  if (!amount || amount <= 0) return toast('Please enter a valid amount.', 'error');
+
+  let splitAmong, customSplits;
+  if (_editSplitMode === 'custom') {
+    customSplits = {};
+    members.forEach((m,i) => {
+      const v = parseFloat(document.getElementById('ecs'+i)?.value) || 0;
+      if (v > 0) customSplits[m] = v;
+    });
+    splitAmong = Object.keys(customSplits);
+    if (!splitAmong.length) return toast('Enter at least one person\'s amount.', 'error');
+    const total = Object.values(customSplits).reduce((s,v)=>s+v,0);
+    if (Math.abs(total - amount) > 0.5) return toast(`Custom amounts total ${fmt(total)} but expense is ${fmt(amount)}.`, 'error');
+  } else {
+    splitAmong = [...document.querySelectorAll('#edit-split-grid .split-check:checked')].map(c => c.value);
+    if (!splitAmong.length) return toast('Select at least one member.', 'error');
+  }
+
+  const idx = expenses.findIndex(x => x.id === _editId);
+  if (idx === -1) return;
+  expenses[idx] = { ...expenses[idx], desc, amount, paidBy, category, date, splitAmong,
+    splitType: _editSplitMode, ...(_editSplitMode==='custom' ? {customSplits} : {customSplits: undefined}) };
+  if (_editSplitMode !== 'custom') delete expenses[idx].customSplits;
+
+  persistData();
+  closeEditModal();
+  renderHistory();
+  renderDash();
+  toast('Expense updated! ✓', 'success');
+}
+
+function deleteFromEdit() {
+  const e = expenses.find(x => x.id === _editId);
+  if (!e || !confirm(`Delete "${e.desc}"?`)) return;
+  expenses = expenses.filter(x => x.id !== _editId);
+  persistData();
+  closeEditModal();
+  renderHistory();
+  renderDash();
+  toast('Expense deleted.');
+}
+
+function closeEditModal() {
+  document.getElementById('edit-modal').classList.remove('open');
+  _editId = null;
 }
 
 // ── Sidebar ──
