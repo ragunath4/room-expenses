@@ -390,8 +390,18 @@ select { cursor: pointer; }
   border-bottom: 1px solid var(--border);
 }
 .sett-item:last-child { border-bottom: none; }
-.sett-desc { font-size: 13px; color: var(--text); }
+.sett-desc { font-size: 13px; color: var(--text); flex: 1; }
+.sett-item-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .sett-amount { font-family: var(--font-mono); font-size: 13px; font-weight: 500; color: var(--success); white-space: nowrap; }
+.sett-undo-btn {
+  padding: 4px 10px; font-size: 11px; font-weight: 700;
+  background: transparent; color: var(--text2);
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: 14px; cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.sett-undo-btn:hover { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
 
 .members-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
 @media (max-width: 500px) { .members-grid { grid-template-columns: repeat(2, 1fr); } }
@@ -1931,10 +1941,23 @@ function renderSettle() {
     sh.innerHTML = '<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">No settlements recorded yet.</div></div>';
     return;
   }
-  sh.innerHTML = settlements.map(s => `<div class="sett-item">
-    <span class="sett-desc"><strong>${s.from}</strong> paid <strong>${s.to}</strong> · <span style="color:var(--text2)">${s.date||''}</span></span>
-    <span class="sett-amount">+${fmt(s.amount)}</span>
+  sh.innerHTML = settlements.map((s, i) => `<div class="sett-item">
+    <span class="sett-desc"><strong>${escHtml(s.from)}</strong> paid <strong>${escHtml(s.to)}</strong> · <span style="color:var(--text2)">${s.date||''}</span></span>
+    <span class="sett-item-right">
+      <span class="sett-amount">+${fmt(s.amount)}</span>
+      <button class="sett-undo-btn" onclick="undoSettlement(${i})" title="Undo this settlement">↩ Undo</button>
+    </span>
   </div>`).join('');
+}
+
+function undoSettlement(i) {
+  const s = settlements[i];
+  if (!s) return;
+  settlements.splice(i, 1);
+  persistData();
+  toast(`Settlement undone: ${s.from} → ${s.to} ${fmt(s.amount)}`, 'success');
+  renderSettle();
+  renderDash();
 }
 
 function addSettlement() {
