@@ -1893,9 +1893,9 @@ function forwardToPersonal(expense) {
   }
 
   if (!adds.length) return;
-  _PF_DOC.update({
+  _PF_DOC.set({
     transactions: firebase.firestore.FieldValue.arrayUnion(...adds)
-  }).catch(() => {});
+  }, { merge: true }).catch(() => {});
 }
 
 async function removeFromPersonal(expId) {
@@ -1990,7 +1990,7 @@ function renderHistory() {
       <div class="expense-icon">${e.category||'📦'}</div>
       <div class="expense-info">
         <div class="expense-desc">${escHtml(e.desc)}</div>
-        <div class="expense-meta">Paid by <span style="color:${c.fg};font-weight:700">${e.paidBy}</span> · ${e.date||''}${e.paidBy === PERSONAL_SYNC_USER ? ' <span class="pf-sync-badge" title="Synced to Personal Finance">🔗 Personal</span>' : ''}</div>
+        <div class="expense-meta">Paid by <span style="color:${c.fg};font-weight:700">${escHtml(e.paidBy)}</span> · ${e.date||''}${e.paidBy === PERSONAL_SYNC_USER ? ' <span class="pf-sync-badge" title="Synced to Personal Finance">🔗 Personal</span>' : ''}</div>
         <div class="expense-split">${splitDetail}</div>
       </div>
       <div class="expense-right">
@@ -2326,15 +2326,15 @@ function renderPersonalDash() {
       </div>`;
       if (d.exps.length) {
         html += `<div class="pcard-exps">`;
-        d.exps.slice(0, 5).forEach(e => {
-          html += `<div class="pcard-exp-row">
+        d.exps.forEach((e, ei) => {
+          html += `<div class="pcard-exp-row${ei >= 5 ? ' pcard-exp-hidden' : ''}">
             <span class="pcard-exp-cat">${escHtml(e.cat)}</span>
             <span class="pcard-exp-desc">${escHtml(e.desc)}</span>
             <span class="pcard-exp-date">${escHtml(e.date)}</span>
             <span class="pcard-exp-share pcard-exp-share-rec">+${fmt(e.share)}</span>
           </div>`;
         });
-        if (d.exps.length > 5) html += `<div class="pcard-exp-more">+ ${d.exps.length - 5} more expenses</div>`;
+        if (d.exps.length > 5) html += `<div class="pcard-exp-more" onclick="expandGroup(this)">+ ${d.exps.length - 5} more</div>`;
         html += `</div>`;
       }
       html += `</div>`;
@@ -2824,9 +2824,13 @@ function saveEdit() {
   if (_editSplitMode !== 'custom') delete expenses[idx].customSplits;
 
   persistData();
-  // Re-sync: remove old forwarded entries, forward updated version
-  if (oldExp.paidBy === PERSONAL_SYNC_USER) removeFromPersonal(oldExp.id);
-  forwardToPersonal(expenses[idx]);
+  // Re-sync: await remove before forwarding to prevent stale-snapshot overwrite
+  const updatedExp = expenses[idx];
+  if (oldExp.paidBy === PERSONAL_SYNC_USER) {
+    removeFromPersonal(oldExp.id).then(() => forwardToPersonal(updatedExp));
+  } else {
+    forwardToPersonal(updatedExp);
+  }
   closeEditModal();
   renderHistory();
   renderDash();
