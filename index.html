@@ -2275,7 +2275,8 @@ function renderPersonalDash() {
         <button class="pcard-settle-btn" onclick="quickSettle(${i})">Settle</button>
       </div>`;
       if (d.exps.length || d.offsets.length) {
-        html += `<div class="pcard-exps">`;
+        const gid = `pg-pay-${i}`;
+        html += `<div class="pcard-exps" id="${gid}">`;
         if (d.exps.length) {
           const expsTotal = d.exps.reduce((s, e) => s + e.share, 0);
           html += `<div class="pcard-group-label"><span>You owe for</span><span class="pcard-group-total pcard-group-total-pay">-${fmt(expsTotal)}</span></div>`;
@@ -2287,7 +2288,7 @@ function renderPersonalDash() {
               <span class="pcard-exp-share pcard-exp-share-pay">-${fmt(e.share)}</span>
             </div>`;
           });
-          if (d.exps.length > 5) html += `<div class="pcard-exp-more" onclick="expandGroup(this)">+ ${d.exps.length - 5} more</div>`;
+          if (d.exps.length > 5) html += `<div class="pcard-exp-more" onclick="expandGroup('${gid}')">+ ${d.exps.length - 5} more</div>`;
         }
         if (d.offsets.length) {
           const offTotal = d.offsets.reduce((s, e) => s + e.share, 0);
@@ -2300,7 +2301,7 @@ function renderPersonalDash() {
               <span class="pcard-exp-share pcard-exp-share-rec">+${fmt(e.share)}</span>
             </div>`;
           });
-          if (d.offsets.length > 5) html += `<div class="pcard-exp-more" onclick="expandGroup(this)">+ ${d.offsets.length - 5} more</div>`;
+          if (d.offsets.length > 5) html += `<div class="pcard-exp-more" onclick="expandGroup('${gid}')">+ ${d.offsets.length - 5} more</div>`;
         }
         html += `</div>`;
       }
@@ -2325,7 +2326,8 @@ function renderPersonalDash() {
         <button class="pcard-settle-btn pcard-recv-btn" onclick="markReceived(${i})">Received</button>
       </div>`;
       if (d.exps.length) {
-        html += `<div class="pcard-exps">`;
+        const gid = `pg-rec-${i}`;
+        html += `<div class="pcard-exps" id="${gid}">`;
         d.exps.forEach((e, ei) => {
           html += `<div class="pcard-exp-row${ei >= 5 ? ' pcard-exp-hidden' : ''}">
             <span class="pcard-exp-cat">${escHtml(e.cat)}</span>
@@ -2334,7 +2336,7 @@ function renderPersonalDash() {
             <span class="pcard-exp-share pcard-exp-share-rec">+${fmt(e.share)}</span>
           </div>`;
         });
-        if (d.exps.length > 5) html += `<div class="pcard-exp-more" onclick="expandGroup(this)">+ ${d.exps.length - 5} more</div>`;
+        if (d.exps.length > 5) html += `<div class="pcard-exp-more" onclick="expandGroup('${gid}')">+ ${d.exps.length - 5} more</div>`;
         html += `</div>`;
       }
       html += `</div>`;
@@ -2345,10 +2347,11 @@ function renderPersonalDash() {
   wrap.innerHTML = html;
 }
 
-function expandGroup(btn) {
-  const exps = btn.parentElement;
-  exps.querySelectorAll('.pcard-exp-hidden').forEach(r => r.classList.remove('pcard-exp-hidden'));
-  btn.remove();
+function expandGroup(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.querySelectorAll('.pcard-exp-hidden').forEach(r => r.classList.remove('pcard-exp-hidden'));
+  el.querySelectorAll('.pcard-exp-more').forEach(b => b.remove());
 }
 
 function quickSettle(i) {
