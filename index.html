@@ -1575,20 +1575,20 @@ function setSyncStatus(state) {
 
 let _writing = false;
 let _writeTimer = null;
+let _lastWriteTs = 0;  // timestamp of our last write; ignore older snapshots
 
 function persistData() {
   sv('rm_members', members);
   sv('rm_expenses', expenses);
   sv('rm_settlements', settlements);
   setSyncStatus('syncing');
-  // Block onSnapshot from overwriting our in-flight write
   _writing = true;
   clearTimeout(_writeTimer);
-  _DOC.set({ members, expenses, settlements })
+  const ts = Date.now();
+  _lastWriteTs = ts;
+  _DOC.set({ members, expenses, settlements, _ts: ts })
     .then(() => {
       setSyncStatus('ok');
-      // Keep blocking for a brief moment so the server-confirmation
-      // snapshot doesn't re-render and clobber unsaved edits
       _writeTimer = setTimeout(() => { _writing = false; }, 800);
     })
     .catch(() => { setSyncStatus('error'); _writing = false; });
@@ -1596,12 +1596,9 @@ function persistData() {
 
 let _syncReady = false;
 function startSync() {
-  // Use onSnapshot only — avoids the race condition where .get()
-  // resolves after a user action and overwrites in-memory state
   _DOC.onSnapshot(snap => {
-    if (_writing) return;          // Our own write in flight — ignore
+    if (_writing) return;
     if (!snap.exists) {
-      // First launch: push localStorage data up to Firestore
       persistData();
       buildLoginGrid();
       renderDash(); renderAddForm();
@@ -1609,6 +1606,9 @@ function startSync() {
       return;
     }
     const d = snap.data();
+    // Ignore stale snapshots from before our last write — prevents
+    // rapid back-to-back writes from overwriting the latest data
+    if ((d._ts || 0) < _lastWriteTs) return;
     members     = d.members     || DEF_MEMBERS;
     expenses    = d.expenses    || [];
     settlements = d.settlements || [];
@@ -2261,7 +2261,13 @@ function getPersonBreakdown(name) {
 function renderPersonalDash() {
   const wrap = document.getElementById('personal-dash-wrap');
   if (!currentUser) { wrap.innerHTML = ''; return; }
-  const { toPay, toReceive } = getPersonBreakdown(currentUser);
+  let toPay, toReceive;
+  try {
+    ({ toPay, toReceive } = getPersonBreakdown(currentUser));
+  } catch(err) {
+    wrap.innerHTML = `<div class="card pcard"><div class="pcard-all-clear"><div style="font-size:28px">⚠️</div><div style="color:var(--danger);font-weight:700">Dashboard error</div><div style="font-size:12px;color:var(--text2)">${escHtml(String(err))}</div></div></div>`;
+    return;
+  }
   _dashPay = toPay;
   _dashRec = toReceive;
   let html = '';
@@ -2978,7 +2984,7 @@ document.addEventListener('keydown', e => {
 });
 
 // ── Utils ──
-function escHtml(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 const escJs = s => String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
 
 // ── Init ──
