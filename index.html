@@ -1778,10 +1778,10 @@ function buildSplitGrid() {
   document.getElementById('split-grid').innerHTML = members.map((m,i) => {
     const c = col(i);
     return `<div>
-      <input type="checkbox" class="split-check" id="sp${i}" value="${m}" checked>
+      <input type="checkbox" class="split-check" id="sp${i}" value="${escHtml(m)}" checked>
       <label class="split-label" for="sp${i}">
         <div class="split-avatar" style="background:${c.bg};color:${c.fg}">${init(m)}</div>
-        <span class="split-name">${m}</span>
+        <span class="split-name">${escHtml(m)}</span>
       </label>
     </div>`;
   }).join('');
@@ -1855,13 +1855,13 @@ function setUndoState(enabled) {
 
 // ── Personal Finance Sync Functions ──
 function forwardToPersonal(expense) {
-  // Writes only Ragu's own share as a personal expense entry.
-  // Lend balances are maintained separately by resyncPersonalLends().
-  if (!expense || expense.paidBy !== PERSONAL_SYNC_USER) return;
-  if (!expense.splitAmong?.length) return;
+  // Returns a Promise so callers can chain resyncPersonalLends() after it lands,
+  // preventing the read-modify-write in resync from wiping this entry.
+  if (!expense || expense.paidBy !== PERSONAL_SYNC_USER) return Promise.resolve();
+  if (!expense.splitAmong?.length) return Promise.resolve();
   const myShare = getShare(expense, PERSONAL_SYNC_USER);
-  if (myShare < 0.005) return;
-  _PF_DOC.set({
+  if (myShare < 0.005) return Promise.resolve();
+  return _PF_DOC.set({
     transactions: firebase.firestore.FieldValue.arrayUnion({
       id: 'rm_' + expense.id + '_e',
       type: 'expense',
@@ -1956,8 +1956,7 @@ function addExpense() {
     splitType: splitMode, ...(splitMode === 'custom' ? {customSplits} : {})};
   expenses.unshift(newExp);
   persistData();
-  forwardToPersonal(newExp);
-  resyncPersonalLends();
+  forwardToPersonal(newExp).then(() => resyncPersonalLends());
 
   document.getElementById('success-title').textContent  = `✓ "${desc}" added!`;
   document.getElementById('success-detail').textContent = detailText;
@@ -1975,7 +1974,7 @@ function addExpense() {
 function renderHistory() {
   const f = document.getElementById('hist-filter');
   const cur = f.value;
-  f.innerHTML = `<option value="all">All Members</option>` + members.map(m => `<option${m===cur?' selected':''}>${m}</option>`).join('');
+  f.innerHTML = `<option value="all">All Members</option>` + members.map(m => `<option value="${escHtml(m)}"${m===cur?' selected':''}>${escHtml(m)}</option>`).join('');
   if (cur && cur !== 'all') f.value = cur;
 
   const sel = f.value;
@@ -2120,6 +2119,8 @@ function removeMember(i) {
 
 function saveMembers() {
   const newM = members.map((_,i) => document.getElementById('mf'+i)?.value.trim() || `Member ${i+1}`);
+  const dupes = newM.filter((n,i) => newM.indexOf(n) !== i);
+  if (dupes.length) return toast(`Duplicate name: "${dupes[0]}" — each member must have a unique name.`, 'error');
   members.forEach((old,i) => {
     const neu = newM[i];
     if (old === neu) return;
@@ -2853,11 +2854,10 @@ function saveEdit() {
   // Re-sync: await remove before forwarding to prevent stale-snapshot overwrite
   const updatedExp = expenses[idx];
   if (oldExp.paidBy === PERSONAL_SYNC_USER) {
-    removeFromPersonal(oldExp.id).then(() => forwardToPersonal(updatedExp));
+    removeFromPersonal(oldExp.id).then(() => forwardToPersonal(updatedExp)).then(() => resyncPersonalLends());
   } else {
-    forwardToPersonal(updatedExp);
+    forwardToPersonal(updatedExp).then(() => resyncPersonalLends());
   }
-  resyncPersonalLends();
   closeEditModal();
   renderHistory();
   renderDash();
