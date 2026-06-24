@@ -1880,6 +1880,18 @@ const ROOM_TO_PF_CAT = {
   '🧹': 'Other',
   '📦': 'Other',
 };
+const ROOM_TO_PF_SUBCAT = {
+  '🛒': 'Basic Food',
+  '🍽️': 'Junk Food',
+  '💡': 'Bills',
+  '🌐': 'Bills',
+  '🏠': 'Room Rent',
+  '🚗': 'Auto / Cab',
+  '🎮': 'Eating Out',
+  '💊': 'Medicine',
+  '🧹': 'Maintenance',
+  '📦': '',
+};
 
 function forwardToPersonal(expense) {
   // Syncs Ragu's share of ANY room expense he's part of — whether he paid or not.
@@ -1891,6 +1903,7 @@ function forwardToPersonal(expense) {
   const paidByMe = expense.paidBy === PERSONAL_SYNC_USER;
   const paidByLabel = paidByMe ? '' : ' · paid by ' + expense.paidBy;
   const pfCategory = ROOM_TO_PF_CAT[expense.category] || 'Other';
+  const pfSubcat   = ROOM_TO_PF_SUBCAT[expense.category] || '';
   return _PF_DOC.set({
     transactions: firebase.firestore.FieldValue.arrayUnion({
       id: 'rm_' + expense.id + '_e',
@@ -1899,7 +1912,7 @@ function forwardToPersonal(expense) {
       date: expense.date,
       purpose: (expense.desc || '') + ' · Room' + paidByLabel,
       category: pfCategory,
-      subcategory: '',
+      subcategory: pfSubcat,
       createdAt: Date.now(),
       _src: 'room'
     })
@@ -1939,10 +1952,13 @@ async function removeSettlementIncome(settId) {
 // into personal finance. Runs once per browser (tracked in localStorage).
 function backfillPersonalExpenses() {
   if (currentUser !== PERSONAL_SYNC_USER) return;
-  if (localStorage.getItem('rm_pf_backfilled_v3')) return;
+  if (localStorage.getItem('rm_pf_backfilled_v4')) return;
   _PF_DOC.get().then(snap => {
     const all = snap.exists ? (snap.data().transactions || []) : [];
-    // Remove ALL existing room expense entries — we'll re-add with correct categories
+    // Save a timestamped backup before modifying anything
+    const backupDoc = _db.collection('personal-finance').doc('backup_' + td().replace(/-/g,''));
+    backupDoc.set({ transactions: all, backedUpAt: Date.now() }).catch(() => {});
+    // Remove ALL existing room expense entries — we'll re-add with correct categories + subcategories
     const nonRoomExpenses = all.filter(t => !(t._src === 'room' && t.type === 'expense'));
     const fresh = [];
     expenses.forEach(e => {
@@ -1958,14 +1974,14 @@ function backfillPersonalExpenses() {
         date: e.date,
         purpose: (e.desc || '') + ' · Room' + (paidByMe ? '' : ' · paid by ' + e.paidBy),
         category: ROOM_TO_PF_CAT[e.category] || 'Other',
-        subcategory: '',
+        subcategory: ROOM_TO_PF_SUBCAT[e.category] || '',
         createdAt: Date.now(),
         _src: 'room'
       });
     });
     _PF_DOC.set({ transactions: [...nonRoomExpenses, ...fresh] }, { merge: true })
       .then(() => {
-        localStorage.setItem('rm_pf_backfilled_v3', '1');
+        localStorage.setItem('rm_pf_backfilled_v4', '1');
         if (fresh.length) toast(`Synced ${fresh.length} expense${fresh.length>1?'s':''} to Personal Finance ✓`, 'success');
       }).catch(() => {});
   }).catch(() => {});
