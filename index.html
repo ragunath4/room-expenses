@@ -1017,6 +1017,7 @@ input[type=number] { -moz-appearance: textfield; }
   transition: opacity 0.15s, transform 0.12s;
 }
 .pcard-settle-btn:hover { opacity: 0.85; transform: scale(1.05); }
+.pcard-recv-btn { background: var(--accent); }
 
 /* ── Floating Calculator ── */
 .calc-fab {
@@ -2128,6 +2129,7 @@ function renderMyCard() {
 
 // ── Personal Dashboard ──
 let _dashPay = [];
+let _dashRec = [];
 
 function getPersonBreakdown(name) {
   const debts = pairDebts();
@@ -2159,6 +2161,7 @@ function renderPersonalDash() {
   if (!currentUser) { wrap.innerHTML = ''; return; }
   const { toPay, toReceive } = getPersonBreakdown(currentUser);
   _dashPay = toPay;
+  _dashRec = toReceive;
   let html = '';
 
   // You Need to Pay
@@ -2213,6 +2216,7 @@ function renderPersonalDash() {
         ${avEl(d.person, pi >= 0 ? pi : i)}
         <span class="pcard-person-name">${escHtml(d.person)}</span>
         <span class="pcard-person-amount pcard-person-amount-rec">+${fmt(d.amount)}</span>
+        <button class="pcard-settle-btn pcard-recv-btn" onclick="markReceived(${i})">Received</button>
       </div>`;
       if (d.exps.length) {
         html += `<div class="pcard-exps">`;
@@ -2241,6 +2245,15 @@ function quickSettle(i) {
   settlements.unshift({ id: uid(), from: currentUser, to: d.person, amount: d.amount, date: td() });
   persistData();
   toast(`${fmt(d.amount)} paid to ${d.person}! ✓`, 'success');
+  renderDash();
+}
+
+function markReceived(i) {
+  const d = _dashRec[i];
+  if (!d || d.amount < 0.01) return;
+  settlements.unshift({ id: uid(), from: d.person, to: currentUser, amount: d.amount, date: td() });
+  persistData();
+  toast(`${fmt(d.amount)} received from ${d.person}! ✓`, 'success');
   renderDash();
 }
 
