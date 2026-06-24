@@ -1941,22 +1941,18 @@ function backfillPersonalExpenses() {
   if (currentUser !== PERSONAL_SYNC_USER) return;
   if (localStorage.getItem('rm_pf_backfilled_v3')) return;
   _PF_DOC.get().then(snap => {
-    const existing = new Set(
-      (snap.exists ? (snap.data().transactions || []) : [])
-        .filter(t => t._src === 'room' && t.type === 'expense')
-        .map(t => t.id)
-    );
-    const toAdd = [];
+    const all = snap.exists ? (snap.data().transactions || []) : [];
+    // Remove ALL existing room expense entries — we'll re-add with correct categories
+    const nonRoomExpenses = all.filter(t => !(t._src === 'room' && t.type === 'expense'));
+    const fresh = [];
     expenses.forEach(e => {
       const involved = e.splitAmong?.includes(PERSONAL_SYNC_USER) || e.paidBy === PERSONAL_SYNC_USER;
       if (!involved) return;
       const myShare = getShare(e, PERSONAL_SYNC_USER);
       if (myShare < 0.005) return;
-      const entryId = 'rm_' + e.id + '_e';
-      if (existing.has(entryId)) return;
       const paidByMe = e.paidBy === PERSONAL_SYNC_USER;
-      toAdd.push({
-        id: entryId,
+      fresh.push({
+        id: 'rm_' + e.id + '_e',
         type: 'expense',
         amount: +myShare.toFixed(2),
         date: e.date,
@@ -1967,14 +1963,10 @@ function backfillPersonalExpenses() {
         _src: 'room'
       });
     });
-    if (!toAdd.length) { localStorage.setItem('rm_pf_backfilled_v3', '1'); return; }
-    // Write all missing entries in one batch using arrayUnion per entry
-    // (Firestore arrayUnion on array field — we do a set merge with the combined list)
-    const all = snap.exists ? (snap.data().transactions || []) : [];
-    _PF_DOC.set({ transactions: [...all, ...toAdd] }, { merge: true })
+    _PF_DOC.set({ transactions: [...nonRoomExpenses, ...fresh] }, { merge: true })
       .then(() => {
         localStorage.setItem('rm_pf_backfilled_v3', '1');
-        toast(`Synced ${toAdd.length} past expense${toAdd.length>1?'s':''} to Personal Finance ✓`, 'success');
+        if (fresh.length) toast(`Synced ${fresh.length} expense${fresh.length>1?'s':''} to Personal Finance ✓`, 'success');
       }).catch(() => {});
   }).catch(() => {});
 }
