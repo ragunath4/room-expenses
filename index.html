@@ -1855,15 +1855,14 @@ function setUndoState(enabled) {
 
 // ── Personal Finance Sync Functions ──
 function forwardToPersonal(expense) {
+  // Writes only Ragu's own share as a personal expense entry.
+  // Lend balances are maintained separately by resyncPersonalLends().
   if (!expense || expense.paidBy !== PERSONAL_SYNC_USER) return;
   if (!expense.splitAmong?.length) return;
-
-  const myShare  = getShare(expense, PERSONAL_SYNC_USER);
-  const lentAmt  = +(expense.amount - myShare).toFixed(2);
-  const adds     = [];
-
-  if (myShare > 0.005) {
-    adds.push({
+  const myShare = getShare(expense, PERSONAL_SYNC_USER);
+  if (myShare < 0.005) return;
+  _PF_DOC.set({
+    transactions: firebase.firestore.FieldValue.arrayUnion({
       id: 'rm_' + expense.id + '_e',
       type: 'expense',
       amount: +myShare.toFixed(2),
@@ -1873,30 +1872,39 @@ function forwardToPersonal(expense) {
       subcategory: '',
       createdAt: Date.now(),
       _src: 'room'
-    });
-  }
-  if (lentAmt > 0.005) {
-    adds.push({
-      id: 'rm_' + expense.id + '_d',
+    })
+  }, { merge: true }).catch(() => {});
+}
+
+function resyncPersonalLends() {
+  // Replaces all per-person room lend balance entries in personal finance
+  // with fresh values from pairDebts(). Called after any change that
+  // affects what roommates owe Ragu.
+  if (currentUser !== PERSONAL_SYNC_USER) return;
+  const theyOweMe = pairDebts().filter(d => d.to === PERSONAL_SYNC_USER && d.amount > 0.01);
+  _PF_DOC.get().then(snap => {
+    const txs = snap.exists ? (snap.data().transactions || []) : [];
+    // Remove all previous room balance and old per-expense lend entries
+    const kept = txs.filter(t =>
+      !(t._src === 'room' && (t._src_bal || (t.id && /^rm_.+_d$/.test(t.id))))
+    );
+    const balances = theyOweMe.map(d => ({
+      id: 'rm_bal_' + d.from.replace(/\W+/g, '_'),
       type: 'debt',
-      amount: lentAmt,
-      date: expense.date,
-      purpose: (expense.desc || '') + ' · Room split',
+      amount: +d.amount.toFixed(2),
+      date: td(),
+      purpose: 'Room · ' + d.from + ' owes you',
       debtDirection: 'lent',
-      debtPerson: 'Roommates',
+      debtPerson: d.from,
       debtDueDate: '',
       debtRepaid: 0,
       debtStatus: 'pending',
       createdAt: Date.now(),
       _src: 'room',
-      _rmId: expense.id
-    });
-  }
-
-  if (!adds.length) return;
-  _PF_DOC.set({
-    transactions: firebase.firestore.FieldValue.arrayUnion(...adds)
-  }, { merge: true }).catch(() => {});
+      _src_bal: true
+    }));
+    _PF_DOC.set({ transactions: [...kept, ...balances] }, { merge: true }).catch(() => {});
+  }).catch(() => {});
 }
 
 async function removeFromPersonal(expId) {
@@ -1949,6 +1957,7 @@ function addExpense() {
   expenses.unshift(newExp);
   persistData();
   forwardToPersonal(newExp);
+  resyncPersonalLends();
 
   document.getElementById('success-title').textContent  = `✓ "${desc}" added!`;
   document.getElementById('success-detail').textContent = detailText;
@@ -2009,6 +2018,7 @@ function delExpense(id) {
   expenses = expenses.filter(e => e.id !== id);
   persistData();
   if (exp) removeFromPersonal(exp.id);
+  resyncPersonalLends();
   renderHistory();
   renderDash();
   toast('Expense deleted.');
@@ -2041,6 +2051,7 @@ function undoSettlement(i) {
   if (!s) return;
   settlements.splice(i, 1);
   persistData();
+  resyncPersonalLends();
   toast(`Settlement undone: ${s.from} → ${s.to} ${fmt(s.amount)}`, 'success');
   renderSettle();
   renderDash();
@@ -2057,6 +2068,7 @@ function addSettlement() {
 
   settlements.unshift({id:uid(), from, to, amount, date});
   persistData();
+  resyncPersonalLends();
   document.getElementById('sett-amount').value = '';
   toast(`${from} → ${to}: ${fmt(amount)} settled!`, 'success');
   renderSettle();
@@ -2360,6 +2372,7 @@ function quickSettle(i) {
   if (!d || d.amount < 0.01) return;
   settlements.unshift({ id: uid(), from: currentUser, to: d.person, amount: d.amount, date: td() });
   persistData();
+  resyncPersonalLends();
   toast(`${fmt(d.amount)} paid to ${d.person}! ✓`, 'success');
   renderDash();
 }
@@ -2369,6 +2382,7 @@ function markReceived(i) {
   if (!d || d.amount < 0.01) return;
   settlements.unshift({ id: uid(), from: d.person, to: currentUser, amount: d.amount, date: td() });
   persistData();
+  resyncPersonalLends();
   toast(`${fmt(d.amount)} received from ${d.person}! ✓`, 'success');
   renderDash();
 }
@@ -2496,6 +2510,7 @@ function settleDebt(i) {
   if (!d) return;
   settlements.unshift({id: uid(), from: d.from, to: d.to, amount: d.amount, date: td()});
   persistData();
+  resyncPersonalLends();
   toast(`${d.from} → ${d.to}: ${fmt(d.amount)} settled! ✓`, 'success');
   openProfile(_pdName);
   // Keep view on the debts section after re-render
@@ -2514,6 +2529,7 @@ function undoLastSettleFromDrawer() {
   if (!confirm(`Undo: ${s.from} → ${s.to} (${fmt(s.amount)})?`)) return;
   settlements.splice(idx, 1);
   persistData();
+  resyncPersonalLends();
   toast('Settlement undone.', 'success');
   openProfile(_pdName);
   setTimeout(() => {
@@ -2835,6 +2851,7 @@ function saveEdit() {
   } else {
     forwardToPersonal(updatedExp);
   }
+  resyncPersonalLends();
   closeEditModal();
   renderHistory();
   renderDash();
@@ -2847,6 +2864,7 @@ function deleteFromEdit() {
   expenses = expenses.filter(x => x.id !== _editId);
   persistData();
   removeFromPersonal(e.id);
+  resyncPersonalLends();
   closeEditModal();
   renderHistory();
   renderDash();
