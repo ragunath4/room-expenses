@@ -630,10 +630,14 @@ input[type=number] { -moz-appearance: textfield; }
   .nav-btn { padding: 18px 10px 16px; font-size: 11px; letter-spacing: 0.4px; }
   .user-pill-name { display: none; }
   .user-pill { padding: 5px 8px 5px 6px; }
-  /* Mobile: hide top nav, show hamburger */
+  /* Mobile: hide top nav, show hamburger + compact title */
   .nav { display: none; }
   .logo { display: none; }
   .hamburger { display: flex; }
+  .mobile-title { display: block !important; }
+  .header-inner { justify-content: space-between; }
+  /* Sync dot tucked inside user pill area on mobile */
+  #sync-dot { display: none; }
 }
 
 /* ── Split type toggle ── */
@@ -916,9 +920,31 @@ input[type=number] { -moz-appearance: textfield; }
 .chip-paid { background: var(--accent-light); color: var(--accent); border: 1px solid var(--accent-border); }
 .chip-split { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
 
+.pd-settle-btn {
+  flex-shrink: 0;
+  background: var(--success-bg); color: var(--success);
+  border: 1px solid #A8D8BB; border-radius: 6px;
+  padding: 4px 10px; font-size: 11px; font-weight: 700;
+  cursor: pointer; transition: background 0.15s;
+  font-family: var(--font-body);
+}
+.pd-settle-btn:hover { background: #C8EDDA; }
+
+.pd-undo-btn {
+  display: block; width: 100%;
+  background: var(--danger-bg); color: var(--danger);
+  border: 1px solid #F0C0C0; border-radius: var(--radius-sm);
+  padding: 9px 14px; font-size: 12px; font-weight: 700;
+  cursor: pointer; text-align: left; margin-bottom: 10px;
+  font-family: var(--font-body); transition: background 0.15s;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pd-undo-btn:hover { background: #F5CACA; }
+
 /* ── Add Expense FAB ── */
 .add-fab {
   position: fixed; bottom: 92px; right: 28px; z-index: 5000;
+  display: none;
   width: 52px; height: 52px; border-radius: 50%;
   background: var(--success); color: #fff; border: none;
   box-shadow: 0 4px 20px rgba(45,122,79,0.45);
@@ -940,7 +966,7 @@ input[type=number] { -moz-appearance: textfield; }
 .calc-fab.open { background: var(--text); box-shadow: 0 4px 20px rgba(28,26,23,0.35); }
 
 .calc-panel {
-  position: fixed; bottom: 92px; right: 28px; z-index: 4999;
+  position: fixed; bottom: 160px; right: 28px; z-index: 4999;
   width: 280px;
   background: var(--text);
   border-radius: 20px;
@@ -1010,6 +1036,7 @@ input[type=number] { -moz-appearance: textfield; }
       <span></span><span></span><span></span>
     </button>
     <div class="logo">The <em>Ledger</em></div>
+    <div class="mobile-title" style="display:none;font-family:var(--font-display);font-size:17px;font-weight:700;color:#F7F3EC;letter-spacing:-0.3px;flex:1;text-align:center;">The <em style="color:var(--accent);font-style:normal;">Ledger</em></div>
     <nav class="nav" role="navigation">
       <button class="nav-btn active" onclick="go('dashboard')">Dashboard</button>
       <button class="nav-btn" onclick="go('add')">Add Expense</button>
@@ -1440,6 +1467,8 @@ function startSync() {
       _syncReady = true;
       buildLoginGrid();
       renderDash(); renderAddForm();
+      updateSidebarUser();
+      updateSidebarActive('dashboard');
     } else {
       // Change came from another device — refresh active section
       const sec = document.querySelector('.section.active')?.id;
@@ -1528,6 +1557,7 @@ function go(name) {
   const renders = {dashboard:renderDash, add:renderAddForm, history:renderHistory, settle:renderSettle, members:renderMembers};
   renders[name]?.();
   updateSidebarActive(name);
+  document.getElementById('add-fab').style.display = name === 'dashboard' ? 'flex' : 'none';
 }
 
 // ── Dashboard ──
@@ -1756,6 +1786,7 @@ function delExpense(id) {
   expenses = expenses.filter(e => e.id !== id);
   persistData();
   renderHistory();
+  renderDash();
   toast('Expense deleted.');
 }
 
@@ -1863,30 +1894,6 @@ function clearData() {
   toast('All data cleared.');
 }
 
-// ── Download CSV ──
-function downloadCSV() {
-  if (!expenses.length) return toast('No expenses to download.','error');
-  const rows = [['Date','Description','Category','Amount (₹)','Paid By','Split Among','Per Person (₹)']];
-  expenses.forEach(e => {
-    const share = e.splitAmong?.length ? (e.amount / e.splitAmong.length).toFixed(2) : e.amount.toFixed(2);
-    rows.push([
-      e.date || '',
-      `"${(e.desc||'').replace(/"/g,'""')}"`,
-      e.category || '',
-      e.amount.toFixed(2),
-      e.paidBy || '',
-      `"${(e.splitAmong||[]).join(', ')}"`,
-      share
-    ]);
-  });
-  const csv = rows.map(r => r.join(',')).join('\n');
-  const a = document.createElement('a');
-  a.href = 'data:text/csv;charset=utf-8,﻿' + encodeURIComponent(csv);
-  a.download = `room-expenses-${td()}.csv`;
-  a.click();
-  toast('CSV downloaded! ✓', 'success');
-}
-
 // ── Toast ──
 let toastT;
 function toast(msg, type='') {
@@ -1969,11 +1976,16 @@ function renderMyCard() {
 }
 
 // ── Profile Drawer ──
+// Store drawer state by index so onclick handlers are safe with any name
+let _pdName = '';
+let _pdOwes = [];
+let _pdExp  = [];
+
 function openProfile(name) {
+  _pdName = name;
   const idx = members.indexOf(name);
   const c = col(idx >= 0 ? idx : 0);
 
-  // avatar + name
   const av = document.getElementById('pd-avatar');
   av.textContent = init(name);
   av.style.background = c.bg; av.style.color = c.fg;
@@ -1997,29 +2009,30 @@ function openProfile(name) {
     netEl.innerHTML = `<span class="drawer-net-label" style="color:var(--text2)">All settled up</span><span class="drawer-net-amount" style="color:var(--text2)">₹0.00</span>`;
   }
 
-  // pairwise debts for this person
+  // pairwise debts
   const allDebts = pairDebts();
-  const owes = allDebts.filter(d => d.from === name);  // name owes others
-  const owed = allDebts.filter(d => d.to === name);    // others owe name
+  _pdOwes = allDebts.filter(d => d.from === name);
+  const owed = allDebts.filter(d => d.to === name);
 
-  const owesEl = document.getElementById('pd-owes');
+  const owesEl  = document.getElementById('pd-owes');
   const owesSec = document.getElementById('pd-owes-sec');
-  if (owes.length) {
+  if (_pdOwes.length) {
     owesSec.style.display = '';
-    owesEl.innerHTML = owes.map(d => {
+    owesEl.innerHTML = _pdOwes.map((d, i) => {
       const ti = members.indexOf(d.to);
       const tc = col(ti >= 0 ? ti : 0);
       return `<div class="prow prow-owes">
         <div class="prow-avatar" style="background:${tc.bg};color:${tc.fg}">${init(d.to)}</div>
-        <span class="prow-name">${d.to}</span>
+        <span class="prow-name">${escHtml(d.to)}</span>
         <span class="prow-amount">-${fmt(d.amount)}</span>
+        <button class="pd-settle-btn" onclick="settleDebt(${i})">Settle</button>
       </div>`;
     }).join('');
   } else {
     owesSec.style.display = 'none';
   }
 
-  const owedEl = document.getElementById('pd-owed');
+  const owedEl  = document.getElementById('pd-owed');
   const owedSec = document.getElementById('pd-owed-sec');
   if (owed.length) {
     owedSec.style.display = '';
@@ -2028,7 +2041,7 @@ function openProfile(name) {
       const fc = col(fi >= 0 ? fi : 0);
       return `<div class="prow prow-owed">
         <div class="prow-avatar" style="background:${fc.bg};color:${fc.fg}">${init(d.from)}</div>
-        <span class="prow-name">${d.from}</span>
+        <span class="prow-name">${escHtml(d.from)}</span>
         <span class="prow-amount">+${fmt(d.amount)}</span>
       </div>`;
     }).join('');
@@ -2036,26 +2049,29 @@ function openProfile(name) {
     owedSec.style.display = 'none';
   }
 
-  // their expenses
-  const myExp = expenses.filter(e => e.paidBy === name || e.splitAmong?.includes(name));
+  // expenses
+  _pdExp = expenses.filter(e => e.paidBy === name || e.splitAmong?.includes(name));
   const expEl = document.getElementById('pd-expenses');
-  if (!myExp.length) {
+  if (!_pdExp.length) {
     expEl.innerHTML = '<div style="font-size:13px;color:var(--text2);padding:10px 0;">No expenses yet.</div>';
   } else {
-    expEl.innerHTML = myExp.map(e => {
+    const undoRow = `<button class="pd-undo-btn" onclick="undoLastExpFromDrawer()">↩ Undo Last Expense: "${escHtml(_pdExp[0].desc)}"</button>`;
+    expEl.innerHTML = undoRow + _pdExp.map((e, i) => {
       const paid = e.paidBy === name;
-      const share = e.splitAmong?.length ? e.amount / e.splitAmong.length : e.amount;
+      const isCustom = e.splitType === 'custom' && e.customSplits;
+      const share = isCustom ? (e.customSplits[name] || 0) : (e.splitAmong?.length ? e.amount / e.splitAmong.length : e.amount);
       return `<div class="drawer-exp-item">
         <div class="drawer-exp-row">
-          <div>
+          <div style="flex:1;min-width:0;">
             <div class="drawer-exp-desc">${escHtml(e.desc)}</div>
             <div class="drawer-exp-meta">${e.date || ''} · ${e.category || '📦'}</div>
             <span class="chip ${paid ? 'chip-paid' : 'chip-split'}">${paid ? 'Paid' : 'Split'}</span>
           </div>
           <div style="text-align:right;flex-shrink:0;">
             <div class="drawer-exp-amount">${paid ? fmt(e.amount) : '-'+fmt(share)}</div>
-            <div style="font-size:11px;color:var(--text2);margin-top:2px;">${paid ? 'paid' : 'your share'}</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:2px;">${paid ? 'paid' : 'share'}</div>
           </div>
+          <button class="del-btn" onclick="delExpFromDrawer(${i})" title="Delete">✕</button>
         </div>
       </div>`;
     }).join('');
@@ -2064,6 +2080,38 @@ function openProfile(name) {
   document.getElementById('drawer-overlay').classList.add('open');
   document.getElementById('profile-drawer').classList.add('open');
   document.body.style.overflow = 'hidden';
+}
+
+function settleDebt(i) {
+  const d = _pdOwes[i];
+  if (!d) return;
+  settlements.unshift({id: uid(), from: d.from, to: d.to, amount: d.amount, date: td()});
+  persistData();
+  toast(`${d.from} → ${d.to}: ${fmt(d.amount)} settled! ✓`, 'success');
+  openProfile(_pdName);
+  renderDash();
+}
+
+function undoLastExpFromDrawer() {
+  if (!_pdExp.length) return toast('No expense to undo.', 'error');
+  const e = _pdExp[0];
+  if (!confirm(`Remove "${e.desc}" (${fmt(e.amount)})?`)) return;
+  expenses = expenses.filter(x => x.id !== e.id);
+  persistData();
+  toast(`"${e.desc}" removed.`, 'success');
+  openProfile(_pdName);
+  renderDash();
+}
+
+function delExpFromDrawer(i) {
+  const e = _pdExp[i];
+  if (!e) return;
+  if (!confirm(`Delete "${e.desc}"?`)) return;
+  expenses = expenses.filter(x => x.id !== e.id);
+  persistData();
+  toast('Expense deleted.', 'success');
+  openProfile(_pdName);
+  renderDash();
 }
 
 function closeProfile() {
@@ -2343,18 +2391,22 @@ document.addEventListener('keydown', e => {
 
 // ── Utils ──
 function escHtml(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+const escJs = s => String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
 
 // ── Init ──
 renderDash();
 renderAddForm();
 buildLoginGrid();
 startSync();
+document.getElementById('add-fab').style.display = 'flex';
 try {
   const savedUser = sessionStorage.getItem('rm_user');
   if (savedUser && members.includes(savedUser)) {
     currentUser = savedUser;
     document.getElementById('login-screen').style.display = 'none';
     updateUserPill();
+    updateSidebarUser();
+    updateSidebarActive('dashboard');
     renderDash();
   }
 } catch(e) {}
