@@ -1623,6 +1623,7 @@ function startSync() {
       renderDash(); renderAddForm();
       updateSidebarUser();
       updateSidebarActive('dashboard');
+      backfillPersonalExpenses();
     } else {
       // Change came from another device — forward any new expenses that
       // include Ragu to his personal finance app
@@ -1890,6 +1891,79 @@ function forwardToPersonal(expense) {
   }, { merge: true }).catch(() => {});
 }
 
+// Records a settlement where Ragu received money as income in personal finance
+function recordSettlementIncome(sett) {
+  if (!sett || sett.to !== PERSONAL_SYNC_USER) return;
+  _PF_DOC.set({
+    transactions: firebase.firestore.FieldValue.arrayUnion({
+      id: 'rm_sett_' + sett.id + '_inc',
+      type: 'income',
+      amount: +sett.amount.toFixed(2),
+      date: sett.date || td(),
+      purpose: 'Received from ' + sett.from + ' · Room settlement',
+      incomeType: 'Room Settlement',
+      createdAt: Date.now(),
+      _src: 'room',
+      _src_sett: true
+    })
+  }, { merge: true }).catch(() => {});
+}
+
+// Removes a settlement income entry (called on undo)
+async function removeSettlementIncome(settId) {
+  try {
+    const snap = await _PF_DOC.get();
+    if (!snap.exists) return;
+    const all = snap.data().transactions || [];
+    const filtered = all.filter(t => t.id !== 'rm_sett_' + settId + '_inc');
+    if (filtered.length !== all.length) await _PF_DOC.update({ transactions: filtered });
+  } catch(e) {}
+}
+
+// One-time backfill: pushes all existing room expenses Ragu is part of
+// into personal finance. Runs once per browser (tracked in localStorage).
+function backfillPersonalExpenses() {
+  if (currentUser !== PERSONAL_SYNC_USER) return;
+  if (localStorage.getItem('rm_pf_backfilled_v2')) return;
+  _PF_DOC.get().then(snap => {
+    const existing = new Set(
+      (snap.exists ? (snap.data().transactions || []) : [])
+        .filter(t => t._src === 'room' && t.type === 'expense')
+        .map(t => t.id)
+    );
+    const toAdd = [];
+    expenses.forEach(e => {
+      const involved = e.splitAmong?.includes(PERSONAL_SYNC_USER) || e.paidBy === PERSONAL_SYNC_USER;
+      if (!involved) return;
+      const myShare = getShare(e, PERSONAL_SYNC_USER);
+      if (myShare < 0.005) return;
+      const entryId = 'rm_' + e.id + '_e';
+      if (existing.has(entryId)) return;
+      const paidByMe = e.paidBy === PERSONAL_SYNC_USER;
+      toAdd.push({
+        id: entryId,
+        type: 'expense',
+        amount: +myShare.toFixed(2),
+        date: e.date,
+        purpose: (e.desc || '') + ' · Room' + (paidByMe ? '' : ' · paid by ' + e.paidBy),
+        category: e.category || '📦',
+        subcategory: '',
+        createdAt: Date.now(),
+        _src: 'room'
+      });
+    });
+    if (!toAdd.length) { localStorage.setItem('rm_pf_backfilled_v2', '1'); return; }
+    // Write all missing entries in one batch using arrayUnion per entry
+    // (Firestore arrayUnion on array field — we do a set merge with the combined list)
+    const all = snap.exists ? (snap.data().transactions || []) : [];
+    _PF_DOC.set({ transactions: [...all, ...toAdd] }, { merge: true })
+      .then(() => {
+        localStorage.setItem('rm_pf_backfilled_v2', '1');
+        toast(`Synced ${toAdd.length} past expense${toAdd.length>1?'s':''} to Personal Finance ✓`, 'success');
+      }).catch(() => {});
+  }).catch(() => {});
+}
+
 function resyncPersonalLends() {
   // Replaces all per-person room lend balance entries in personal finance
   // with fresh values from pairDebts(). Called after any change that
@@ -2065,6 +2139,7 @@ function undoSettlement(i) {
   settlements.splice(i, 1);
   persistData();
   resyncPersonalLends();
+  removeSettlementIncome(s.id);
   toast(`Settlement undone: ${s.from} → ${s.to} ${fmt(s.amount)}`, 'success');
   renderSettle();
   renderDash();
@@ -2079,9 +2154,11 @@ function addSettlement() {
   if (from === to)            return toast('From and To must be different people.','error');
   if (!amount || amount <= 0) return toast('Please enter a valid amount.','error');
 
-  settlements.unshift({id:uid(), from, to, amount, date});
+  const sett = {id:uid(), from, to, amount, date};
+  settlements.unshift(sett);
   persistData();
   resyncPersonalLends();
+  recordSettlementIncome(sett);
   document.getElementById('sett-amount').value = '';
   toast(`${from} → ${to}: ${fmt(amount)} settled!`, 'success');
   renderSettle();
@@ -2401,9 +2478,11 @@ function quickSettle(i) {
 function markReceived(i) {
   const d = _dashRec[i];
   if (!d || d.amount < 0.01) return;
-  settlements.unshift({ id: uid(), from: d.person, to: currentUser, amount: d.amount, date: td() });
+  const sett = { id: uid(), from: d.person, to: currentUser, amount: d.amount, date: td() };
+  settlements.unshift(sett);
   persistData();
   resyncPersonalLends();
+  recordSettlementIncome(sett);
   toast(`${fmt(d.amount)} received from ${d.person}! ✓`, 'success');
   renderDash();
 }
@@ -2529,9 +2608,11 @@ function openProfile(name) {
 function settleDebt(i) {
   const d = _pdOwes[i];
   if (!d) return;
-  settlements.unshift({id: uid(), from: d.from, to: d.to, amount: d.amount, date: td()});
+  const sett = {id: uid(), from: d.from, to: d.to, amount: d.amount, date: td()};
+  settlements.unshift(sett);
   persistData();
   resyncPersonalLends();
+  recordSettlementIncome(sett);
   toast(`${d.from} → ${d.to}: ${fmt(d.amount)} settled! ✓`, 'success');
   openProfile(_pdName);
   // Keep view on the debts section after re-render
@@ -2551,6 +2632,7 @@ function undoLastSettleFromDrawer() {
   settlements.splice(idx, 1);
   persistData();
   resyncPersonalLends();
+  removeSettlementIncome(s.id);
   toast('Settlement undone.', 'success');
   openProfile(_pdName);
   setTimeout(() => {
