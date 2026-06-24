@@ -352,7 +352,6 @@ select { cursor: pointer; }
 .expense-desc { font-weight: 700; font-size: 15px; }
 .expense-meta { font-size: 12px; color: var(--text2); margin-top: 2px; }
 .expense-split { font-size: 11px; color: var(--text2); margin-top: 2px; }
-.pf-sync-badge { font-size: 10px; font-weight: 700; color: var(--accent); background: var(--accent-light); border: 1px solid var(--accent-border, var(--border)); border-radius: 8px; padding: 1px 6px; margin-left: 4px; vertical-align: middle; }
 .expense-right { text-align: right; flex-shrink: 0; }
 .expense-amount { font-family: var(--font-mono); font-size: 16px; font-weight: 500; }
 .expense-per { font-family: var(--font-mono); font-size: 11px; color: var(--text2); margin-top: 2px; }
@@ -1560,11 +1559,6 @@ const _fbApp = firebase.initializeApp({
 const _db  = firebase.firestore();
 const _DOC = _db.collection('rooms').doc('main');
 
-// ── Personal Finance Sync ──
-// Change this to match your exact member name in the room app
-const PERSONAL_SYNC_USER = 'Ragu';
-const _PF_DOC = _db.collection('personal-finance').doc('main');
-
 function setSyncStatus(state) {
   let el = document.getElementById('sync-dot');
   if (!el) return;
@@ -1576,7 +1570,6 @@ function setSyncStatus(state) {
 let _writing = false;
 let _writeTimer = null;
 let _lastWriteTs = 0;        // timestamp of our last write; ignore older snapshots
-let _knownExpenseIds = new Set(); // tracks seen expense IDs to detect new ones from other devices
 
 function persistData() {
   sv('rm_members', members);
@@ -1618,24 +1611,12 @@ function startSync() {
     if (!_syncReady) {
       // Very first snapshot — initial page load from Firestore
       _syncReady = true;
-      _knownExpenseIds = new Set(expenses.map(e => e.id));
       buildLoginGrid();
       renderDash(); renderAddForm();
       updateSidebarUser();
       updateSidebarActive('dashboard');
-      backfillPersonalExpenses();
     } else {
-      // Change came from another device — forward any new expenses that
-      // include Ragu to his personal finance app
-      if (currentUser === PERSONAL_SYNC_USER) {
-        expenses.forEach(e => {
-          if (!_knownExpenseIds.has(e.id)) {
-            forwardToPersonal(e).then(() => resyncPersonalLends());
-          }
-        });
-      }
-      _knownExpenseIds = new Set(expenses.map(e => e.id));
-      // Refresh active section
+      // Change came from another device — refresh active section
       const sec = document.querySelector('.section.active')?.id;
       if (sec === 'sec-dashboard') renderDash();
       else if (sec === 'sec-history') renderHistory();
@@ -1866,172 +1847,6 @@ function setUndoState(enabled) {
   btn.style.opacity = enabled ? '1' : '0.5';
 }
 
-// ── Personal Finance Sync Functions ──
-// Maps room emoji categories to personal finance text category names
-const ROOM_TO_PF_CAT = {
-  '🛒': 'Food',
-  '🍽️': 'Food',
-  '💡': 'Rent',
-  '🌐': 'Rent',
-  '🏠': 'Rent',
-  '🚗': 'Transport',
-  '🎮': 'Entertainment',
-  '💊': 'Health',
-  '🧹': 'Other',
-  '📦': 'Other',
-};
-const ROOM_TO_PF_SUBCAT = {
-  '🛒': 'Basic Food',
-  '🍽️': 'Junk Food',
-  '💡': 'Bills',
-  '🌐': 'Bills',
-  '🏠': 'Room Rent',
-  '🚗': 'Auto / Cab',
-  '🎮': 'Eating Out',
-  '💊': 'Medicine',
-  '🧹': 'Maintenance',
-  '📦': '',
-};
-
-function forwardToPersonal(expense) {
-  // Syncs Ragu's share of ANY room expense he's part of — whether he paid or not.
-  // Returns a Promise so callers can chain resyncPersonalLends() after it lands.
-  if (!expense) return Promise.resolve();
-  if (!expense.splitAmong?.includes(PERSONAL_SYNC_USER) && expense.paidBy !== PERSONAL_SYNC_USER) return Promise.resolve();
-  const myShare = getShare(expense, PERSONAL_SYNC_USER);
-  if (myShare < 0.005) return Promise.resolve();
-  const paidByMe = expense.paidBy === PERSONAL_SYNC_USER;
-  const paidByLabel = paidByMe ? '' : ' · paid by ' + expense.paidBy;
-  const pfCategory = ROOM_TO_PF_CAT[expense.category] || 'Other';
-  const pfSubcat   = ROOM_TO_PF_SUBCAT[expense.category] || '';
-  return _PF_DOC.set({
-    transactions: firebase.firestore.FieldValue.arrayUnion({
-      id: 'rm_' + expense.id + '_e',
-      type: 'expense',
-      amount: +myShare.toFixed(2),
-      date: expense.date,
-      purpose: (expense.desc || '') + ' · Room' + paidByLabel,
-      category: pfCategory,
-      subcategory: pfSubcat,
-      createdAt: Date.now(),
-      _src: 'room'
-    })
-  }, { merge: true }).catch(() => {});
-}
-
-// Records a settlement where Ragu received money as income in personal finance
-function recordSettlementIncome(sett) {
-  if (!sett || sett.to !== PERSONAL_SYNC_USER) return;
-  _PF_DOC.set({
-    transactions: firebase.firestore.FieldValue.arrayUnion({
-      id: 'rm_sett_' + sett.id + '_inc',
-      type: 'income',
-      amount: +sett.amount.toFixed(2),
-      date: sett.date || td(),
-      purpose: 'Received from ' + sett.from + ' · Room settlement',
-      incomeType: 'Room Settlement',
-      createdAt: Date.now(),
-      _src: 'room',
-      _src_sett: true
-    })
-  }, { merge: true }).catch(() => {});
-}
-
-// Removes a settlement income entry (called on undo)
-async function removeSettlementIncome(settId) {
-  try {
-    const snap = await _PF_DOC.get();
-    if (!snap.exists) return;
-    const all = snap.data().transactions || [];
-    const filtered = all.filter(t => t.id !== 'rm_sett_' + settId + '_inc');
-    if (filtered.length !== all.length) await _PF_DOC.update({ transactions: filtered });
-  } catch(e) {}
-}
-
-// One-time backfill: pushes all existing room expenses Ragu is part of
-// into personal finance. Runs once per browser (tracked in localStorage).
-function backfillPersonalExpenses() {
-  if (currentUser !== PERSONAL_SYNC_USER) return;
-  if (localStorage.getItem('rm_pf_backfilled_v4')) return;
-  _PF_DOC.get().then(snap => {
-    const all = snap.exists ? (snap.data().transactions || []) : [];
-    // Save a timestamped backup before modifying anything
-    const backupDoc = _db.collection('personal-finance').doc('backup_' + td().replace(/-/g,''));
-    backupDoc.set({ transactions: all, backedUpAt: Date.now() }).catch(() => {});
-    // Remove ALL existing room expense entries — we'll re-add with correct categories + subcategories
-    const nonRoomExpenses = all.filter(t => !(t._src === 'room' && t.type === 'expense'));
-    const fresh = [];
-    expenses.forEach(e => {
-      const involved = e.splitAmong?.includes(PERSONAL_SYNC_USER) || e.paidBy === PERSONAL_SYNC_USER;
-      if (!involved) return;
-      const myShare = getShare(e, PERSONAL_SYNC_USER);
-      if (myShare < 0.005) return;
-      const paidByMe = e.paidBy === PERSONAL_SYNC_USER;
-      fresh.push({
-        id: 'rm_' + e.id + '_e',
-        type: 'expense',
-        amount: +myShare.toFixed(2),
-        date: e.date,
-        purpose: (e.desc || '') + ' · Room' + (paidByMe ? '' : ' · paid by ' + e.paidBy),
-        category: ROOM_TO_PF_CAT[e.category] || 'Other',
-        subcategory: ROOM_TO_PF_SUBCAT[e.category] || '',
-        createdAt: Date.now(),
-        _src: 'room'
-      });
-    });
-    _PF_DOC.set({ transactions: [...nonRoomExpenses, ...fresh] }, { merge: true })
-      .then(() => {
-        localStorage.setItem('rm_pf_backfilled_v4', '1');
-        if (fresh.length) toast(`Synced ${fresh.length} expense${fresh.length>1?'s':''} to Personal Finance ✓`, 'success');
-      }).catch(() => {});
-  }).catch(() => {});
-}
-
-function resyncPersonalLends() {
-  // Replaces all per-person room lend balance entries in personal finance
-  // with fresh values from pairDebts(). Called after any change that
-  // affects what roommates owe Ragu.
-  if (currentUser !== PERSONAL_SYNC_USER) return;
-  const theyOweMe = pairDebts().filter(d => d.to === PERSONAL_SYNC_USER && d.amount > 0.01);
-  _PF_DOC.get().then(snap => {
-    const txs = snap.exists ? (snap.data().transactions || []) : [];
-    // Remove all previous room balance and old per-expense lend entries
-    const kept = txs.filter(t =>
-      !(t._src === 'room' && (t._src_bal || (t.id && /^rm_.+_d$/.test(t.id))))
-    );
-    const balances = theyOweMe.map(d => ({
-      id: 'rm_bal_' + d.from.replace(/\W+/g, '_'),
-      type: 'debt',
-      amount: +d.amount.toFixed(2),
-      date: td(),
-      purpose: 'Room · ' + d.from + ' owes you',
-      debtDirection: 'lent',
-      debtPerson: d.from,
-      debtDueDate: '',
-      debtRepaid: 0,
-      debtStatus: 'pending',
-      createdAt: Date.now(),
-      _src: 'room',
-      _src_bal: true
-    }));
-    _PF_DOC.set({ transactions: [...kept, ...balances] }, { merge: true }).catch(() => {});
-  }).catch(() => {});
-}
-
-async function removeFromPersonal(expId) {
-  try {
-    const snap = await _PF_DOC.get();
-    if (!snap.exists) return;
-    const all      = snap.data().transactions || [];
-    const filtered = all.filter(t =>
-      t.id !== 'rm_' + expId + '_e' && t.id !== 'rm_' + expId + '_d'
-    );
-    if (filtered.length !== all.length) {
-      await _PF_DOC.update({ transactions: filtered });
-    }
-  } catch(e) {}
-}
-
 function addExpense() {
   const desc     = document.getElementById('exp-desc').value.trim();
   const amount   = parseFloat(document.getElementById('exp-amount').value);
@@ -2067,8 +1882,6 @@ function addExpense() {
     splitType: splitMode, ...(splitMode === 'custom' ? {customSplits} : {})};
   expenses.unshift(newExp);
   persistData();
-  forwardToPersonal(newExp).then(() => resyncPersonalLends());
-
   document.getElementById('success-title').textContent  = `✓ "${desc}" added!`;
   document.getElementById('success-detail').textContent = detailText;
   const banner = document.getElementById('success-banner');
@@ -2110,7 +1923,7 @@ function renderHistory() {
       <div class="expense-icon">${e.category||'📦'}</div>
       <div class="expense-info">
         <div class="expense-desc">${escHtml(e.desc)}</div>
-        <div class="expense-meta">Paid by <span style="color:${c.fg};font-weight:700">${escHtml(e.paidBy)}</span> · ${e.date||''}${e.paidBy === PERSONAL_SYNC_USER ? ' <span class="pf-sync-badge" title="Synced to Personal Finance">🔗 Personal</span>' : ''}</div>
+        <div class="expense-meta">Paid by <span style="color:${c.fg};font-weight:700">${escHtml(e.paidBy)}</span> · ${e.date||''}</div>
         <div class="expense-split">${splitDetail}</div>
       </div>
       <div class="expense-right">
@@ -2127,8 +1940,6 @@ function delExpense(id) {
   const exp = expenses.find(e => e.id === id);
   expenses = expenses.filter(e => e.id !== id);
   persistData();
-  if (exp) removeFromPersonal(exp.id);
-  resyncPersonalLends();
   renderHistory();
   renderDash();
   toast('Expense deleted.');
@@ -2161,8 +1972,6 @@ function undoSettlement(i) {
   if (!s) return;
   settlements.splice(i, 1);
   persistData();
-  resyncPersonalLends();
-  removeSettlementIncome(s.id);
   toast(`Settlement undone: ${s.from} → ${s.to} ${fmt(s.amount)}`, 'success');
   renderSettle();
   renderDash();
@@ -2180,8 +1989,6 @@ function addSettlement() {
   const sett = {id:uid(), from, to, amount, date};
   settlements.unshift(sett);
   persistData();
-  resyncPersonalLends();
-  recordSettlementIncome(sett);
   document.getElementById('sett-amount').value = '';
   toast(`${from} → ${to}: ${fmt(amount)} settled!`, 'success');
   renderSettle();
@@ -2493,7 +2300,6 @@ function quickSettle(i) {
   if (!d || d.amount < 0.01) return;
   settlements.unshift({ id: uid(), from: currentUser, to: d.person, amount: d.amount, date: td() });
   persistData();
-  resyncPersonalLends();
   toast(`${fmt(d.amount)} paid to ${d.person}! ✓`, 'success');
   renderDash();
 }
@@ -2504,8 +2310,6 @@ function markReceived(i) {
   const sett = { id: uid(), from: d.person, to: currentUser, amount: d.amount, date: td() };
   settlements.unshift(sett);
   persistData();
-  resyncPersonalLends();
-  recordSettlementIncome(sett);
   toast(`${fmt(d.amount)} received from ${d.person}! ✓`, 'success');
   renderDash();
 }
@@ -2634,8 +2438,6 @@ function settleDebt(i) {
   const sett = {id: uid(), from: d.from, to: d.to, amount: d.amount, date: td()};
   settlements.unshift(sett);
   persistData();
-  resyncPersonalLends();
-  recordSettlementIncome(sett);
   toast(`${d.from} → ${d.to}: ${fmt(d.amount)} settled! ✓`, 'success');
   openProfile(_pdName);
   // Keep view on the debts section after re-render
@@ -2654,8 +2456,6 @@ function undoLastSettleFromDrawer() {
   if (!confirm(`Undo: ${s.from} → ${s.to} (${fmt(s.amount)})?`)) return;
   settlements.splice(idx, 1);
   persistData();
-  resyncPersonalLends();
-  removeSettlementIncome(s.id);
   toast('Settlement undone.', 'success');
   openProfile(_pdName);
   setTimeout(() => {
@@ -2970,13 +2770,6 @@ function saveEdit() {
   if (_editSplitMode !== 'custom') delete expenses[idx].customSplits;
 
   persistData();
-  // Re-sync: await remove before forwarding to prevent stale-snapshot overwrite
-  const updatedExp = expenses[idx];
-  if (oldExp.paidBy === PERSONAL_SYNC_USER) {
-    removeFromPersonal(oldExp.id).then(() => forwardToPersonal(updatedExp)).then(() => resyncPersonalLends());
-  } else {
-    forwardToPersonal(updatedExp).then(() => resyncPersonalLends());
-  }
   closeEditModal();
   renderHistory();
   renderDash();
@@ -2988,8 +2781,6 @@ function deleteFromEdit() {
   if (!e || !confirm(`Delete "${e.desc}"?`)) return;
   expenses = expenses.filter(x => x.id !== _editId);
   persistData();
-  removeFromPersonal(e.id);
-  resyncPersonalLends();
   closeEditModal();
   renderHistory();
   renderDash();
