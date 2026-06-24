@@ -1575,7 +1575,8 @@ function setSyncStatus(state) {
 
 let _writing = false;
 let _writeTimer = null;
-let _lastWriteTs = 0;  // timestamp of our last write; ignore older snapshots
+let _lastWriteTs = 0;        // timestamp of our last write; ignore older snapshots
+let _knownExpenseIds = new Set(); // tracks seen expense IDs to detect new ones from other devices
 
 function persistData() {
   sv('rm_members', members);
@@ -1617,12 +1618,23 @@ function startSync() {
     if (!_syncReady) {
       // Very first snapshot — initial page load from Firestore
       _syncReady = true;
+      _knownExpenseIds = new Set(expenses.map(e => e.id));
       buildLoginGrid();
       renderDash(); renderAddForm();
       updateSidebarUser();
       updateSidebarActive('dashboard');
     } else {
-      // Change came from another device — refresh active section
+      // Change came from another device — forward any new expenses that
+      // include Ragu to his personal finance app
+      if (currentUser === PERSONAL_SYNC_USER) {
+        expenses.forEach(e => {
+          if (!_knownExpenseIds.has(e.id)) {
+            forwardToPersonal(e).then(() => resyncPersonalLends());
+          }
+        });
+      }
+      _knownExpenseIds = new Set(expenses.map(e => e.id));
+      // Refresh active section
       const sec = document.querySelector('.section.active')?.id;
       if (sec === 'sec-dashboard') renderDash();
       else if (sec === 'sec-history') renderHistory();
@@ -1855,20 +1867,22 @@ function setUndoState(enabled) {
 
 // ── Personal Finance Sync Functions ──
 function forwardToPersonal(expense) {
-  // Returns a Promise so callers can chain resyncPersonalLends() after it lands,
-  // preventing the read-modify-write in resync from wiping this entry.
-  if (!expense || expense.paidBy !== PERSONAL_SYNC_USER) return Promise.resolve();
-  if (!expense.splitAmong?.length) return Promise.resolve();
+  // Syncs Ragu's share of ANY room expense he's part of — whether he paid or not.
+  // Returns a Promise so callers can chain resyncPersonalLends() after it lands.
+  if (!expense) return Promise.resolve();
+  if (!expense.splitAmong?.includes(PERSONAL_SYNC_USER) && expense.paidBy !== PERSONAL_SYNC_USER) return Promise.resolve();
   const myShare = getShare(expense, PERSONAL_SYNC_USER);
   if (myShare < 0.005) return Promise.resolve();
+  const paidByMe = expense.paidBy === PERSONAL_SYNC_USER;
+  const paidByLabel = paidByMe ? '' : ' · paid by ' + expense.paidBy;
   return _PF_DOC.set({
     transactions: firebase.firestore.FieldValue.arrayUnion({
       id: 'rm_' + expense.id + '_e',
       type: 'expense',
       amount: +myShare.toFixed(2),
       date: expense.date,
-      purpose: (expense.desc || '') + ' · Room',
-      category: 'Room',
+      purpose: (expense.desc || '') + ' · Room' + paidByLabel,
+      category: expense.category || '📦',
       subcategory: '',
       createdAt: Date.now(),
       _src: 'room'
