@@ -962,6 +962,52 @@ input[type=number] { -moz-appearance: textfield; }
 }
 .add-fab:hover { transform: scale(1.08); box-shadow: 0 6px 28px rgba(45,122,79,0.55); }
 
+/* ── Personal Dashboard Cards ── */
+.pcard { margin-bottom: 16px; border-radius: 16px; overflow: hidden; padding: 0; }
+.pcard-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px 12px; border-bottom: 1px solid var(--border);
+}
+.pcard-head-left { display: flex; align-items: center; gap: 8px; }
+.pcard-title { font-size: 15px; font-weight: 700; }
+.pcard-total { font-family: var(--font-mono); font-size: 16px; font-weight: 600; }
+.pcard-total-pay { color: var(--danger); }
+.pcard-total-rec { color: var(--success); }
+.pcard-person { border-bottom: 1px solid var(--border); }
+.pcard-person:last-child { border-bottom: none; }
+.pcard-person-top {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 18px;
+}
+.pcard-person-name { flex: 1; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pcard-person-amount { font-family: var(--font-mono); font-size: 14px; font-weight: 600; white-space: nowrap; }
+.pcard-person-amount-pay { color: var(--danger); }
+.pcard-person-amount-rec { color: var(--success); }
+.pcard-exps { padding: 0 18px 10px 66px; display: flex; flex-direction: column; gap: 4px; }
+.pcard-exp-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 9px; background: var(--surface2);
+  border-radius: 8px; font-size: 12px;
+}
+.pcard-exp-cat { font-size: 15px; flex-shrink: 0; width: 22px; text-align: center; }
+.pcard-exp-desc { flex: 1; color: var(--text2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pcard-exp-date { font-size: 11px; color: var(--text2); opacity: 0.65; flex-shrink: 0; }
+.pcard-exp-share { font-family: var(--font-mono); font-size: 12px; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+.pcard-exp-share-pay { color: var(--danger); }
+.pcard-exp-share-rec { color: var(--success); }
+.pcard-exp-more { font-size: 11px; color: var(--text2); padding: 3px 9px; font-style: italic; }
+.pcard-all-clear {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 28px 18px; gap: 8px; text-align: center;
+}
+.pcard-settle-btn {
+  padding: 5px 14px; font-size: 12px; font-weight: 700;
+  background: var(--success); color: #fff; border: none;
+  border-radius: 20px; cursor: pointer; flex-shrink: 0;
+  transition: opacity 0.15s, transform 0.12s;
+}
+.pcard-settle-btn:hover { opacity: 0.85; transform: scale(1.05); }
+
 /* ── Floating Calculator ── */
 .calc-fab {
   position: fixed; bottom: 28px; right: 28px; z-index: 5000;
@@ -1066,9 +1112,9 @@ input[type=number] { -moz-appearance: textfield; }
   <!-- ── DASHBOARD ── -->
   <section id="sec-dashboard" class="section active">
     <div id="my-card-wrap"></div>
+    <div id="personal-dash-wrap"></div>
     <div class="section-header">
-      <h1 class="section-title">Overview</h1>
-      <button class="btn btn-primary" onclick="go('add')">+ Add Expense</button>
+      <h1 class="section-title" id="dash-section-title">Overview</h1>
     </div>
 
     <div class="stats-row">
@@ -1642,6 +1688,9 @@ function go(name) {
 // ── Dashboard ──
 function renderDash() {
   renderMyCard();
+  renderPersonalDash();
+  const titleEl = document.getElementById('dash-section-title');
+  if (titleEl) titleEl.textContent = currentUser ? 'Room Summary' : 'Overview';
   const total = expenses.reduce((s,e) => s+e.amount, 0);
   const mo = new Date().toISOString().slice(0,7);
   const month = expenses.filter(e => (e.date||'').startsWith(mo)).reduce((s,e) => s+e.amount, 0);
@@ -2052,6 +2101,124 @@ function renderMyCard() {
       ${totalIOwe <= 0.01 && totalOwedMe <= 0.01 ? `<div class="my-card-badge" style="background:rgba(255,255,255,0.08);color:#8A8680"><span>Status</span>All clear ✓</div>` : ''}
     </div>
   </div>`;
+}
+
+// ── Personal Dashboard ──
+let _dashPay = [];
+
+function getPersonBreakdown(name) {
+  const debts = pairDebts();
+  const toPay = debts
+    .filter(d => d.from === name)
+    .map(d => {
+      const exps = expenses
+        .filter(e => e.paidBy === d.to && e.splitAmong?.includes(name))
+        .map(e => ({ desc: e.desc || '(no description)', cat: e.category || '📦', date: e.date || '', share: getShare(e, name) }))
+        .filter(e => e.share > 0);
+      return { person: d.to, amount: d.amount, exps };
+    })
+    .filter(d => d.amount > 0.01);
+  const toReceive = debts
+    .filter(d => d.to === name)
+    .map(d => {
+      const exps = expenses
+        .filter(e => e.paidBy === name && e.splitAmong?.includes(d.from))
+        .map(e => ({ desc: e.desc || '(no description)', cat: e.category || '📦', date: e.date || '', share: getShare(e, d.from) }))
+        .filter(e => e.share > 0);
+      return { person: d.from, amount: d.amount, exps };
+    })
+    .filter(d => d.amount > 0.01);
+  return { toPay, toReceive };
+}
+
+function renderPersonalDash() {
+  const wrap = document.getElementById('personal-dash-wrap');
+  if (!currentUser) { wrap.innerHTML = ''; return; }
+  const { toPay, toReceive } = getPersonBreakdown(currentUser);
+  _dashPay = toPay;
+  let html = '';
+
+  // You Need to Pay
+  if (!toPay.length) {
+    html += `<div class="card pcard"><div class="pcard-all-clear">
+      <div style="font-size:32px">🎉</div>
+      <div style="font-weight:700;color:var(--success)">You don't owe anyone!</div>
+      <div style="font-size:13px;color:var(--text2)">All clear on your end</div>
+    </div></div>`;
+  } else {
+    const totalPay = toPay.reduce((s, d) => s + d.amount, 0);
+    html += `<div class="card pcard"><div class="pcard-head">
+      <div class="pcard-head-left"><span style="font-size:18px">💸</span><span class="pcard-title">You Need to Pay</span></div>
+      <span class="pcard-total pcard-total-pay">${fmt(totalPay)}</span>
+    </div>`;
+    toPay.forEach((d, i) => {
+      const pi = members.indexOf(d.person);
+      html += `<div class="pcard-person"><div class="pcard-person-top">
+        ${avEl(d.person, pi >= 0 ? pi : i)}
+        <span class="pcard-person-name">${escHtml(d.person)}</span>
+        <span class="pcard-person-amount pcard-person-amount-pay">${fmt(d.amount)}</span>
+        <button class="pcard-settle-btn" onclick="quickSettle(${i})">Settle</button>
+      </div>`;
+      if (d.exps.length) {
+        html += `<div class="pcard-exps">`;
+        d.exps.slice(0, 5).forEach(e => {
+          html += `<div class="pcard-exp-row">
+            <span class="pcard-exp-cat">${escHtml(e.cat)}</span>
+            <span class="pcard-exp-desc">${escHtml(e.desc)}</span>
+            <span class="pcard-exp-date">${escHtml(e.date)}</span>
+            <span class="pcard-exp-share pcard-exp-share-pay">-${fmt(e.share)}</span>
+          </div>`;
+        });
+        if (d.exps.length > 5) html += `<div class="pcard-exp-more">+ ${d.exps.length - 5} more expenses</div>`;
+        html += `</div>`;
+      }
+      html += `</div>`;
+    });
+    html += `</div>`;
+  }
+
+  // You'll Receive
+  if (toReceive.length) {
+    const totalRec = toReceive.reduce((s, d) => s + d.amount, 0);
+    html += `<div class="card pcard"><div class="pcard-head">
+      <div class="pcard-head-left"><span style="font-size:18px">💰</span><span class="pcard-title">You'll Receive</span></div>
+      <span class="pcard-total pcard-total-rec">+${fmt(totalRec)}</span>
+    </div>`;
+    toReceive.forEach((d, i) => {
+      const pi = members.indexOf(d.person);
+      html += `<div class="pcard-person"><div class="pcard-person-top">
+        ${avEl(d.person, pi >= 0 ? pi : i)}
+        <span class="pcard-person-name">${escHtml(d.person)}</span>
+        <span class="pcard-person-amount pcard-person-amount-rec">+${fmt(d.amount)}</span>
+      </div>`;
+      if (d.exps.length) {
+        html += `<div class="pcard-exps">`;
+        d.exps.slice(0, 5).forEach(e => {
+          html += `<div class="pcard-exp-row">
+            <span class="pcard-exp-cat">${escHtml(e.cat)}</span>
+            <span class="pcard-exp-desc">${escHtml(e.desc)}</span>
+            <span class="pcard-exp-date">${escHtml(e.date)}</span>
+            <span class="pcard-exp-share pcard-exp-share-rec">+${fmt(e.share)}</span>
+          </div>`;
+        });
+        if (d.exps.length > 5) html += `<div class="pcard-exp-more">+ ${d.exps.length - 5} more expenses</div>`;
+        html += `</div>`;
+      }
+      html += `</div>`;
+    });
+    html += `</div>`;
+  }
+
+  wrap.innerHTML = html;
+}
+
+function quickSettle(i) {
+  const d = _dashPay[i];
+  if (!d || d.amount < 0.01) return;
+  settlements.unshift({ id: uid(), from: currentUser, to: d.person, amount: d.amount, date: td() });
+  persistData();
+  toast(`${fmt(d.amount)} paid to ${d.person}! ✓`, 'success');
+  renderDash();
 }
 
 // ── Profile Drawer ──
