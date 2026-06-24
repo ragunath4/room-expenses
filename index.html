@@ -1166,48 +1166,61 @@ function setSyncStatus(state) {
   el.title = state === 'syncing' ? 'Syncing…' : state === 'error' ? 'Sync error' : 'Synced';
 }
 
+let _writing = false;
+let _writeTimer = null;
+
 function persistData() {
   sv('rm_members', members);
   sv('rm_expenses', expenses);
   sv('rm_settlements', settlements);
   setSyncStatus('syncing');
+  // Block onSnapshot from overwriting our in-flight write
+  _writing = true;
+  clearTimeout(_writeTimer);
   _DOC.set({ members, expenses, settlements })
-    .then(() => setSyncStatus('ok'))
-    .catch(() => setSyncStatus('error'));
+    .then(() => {
+      setSyncStatus('ok');
+      // Keep blocking for a brief moment so the server-confirmation
+      // snapshot doesn't re-render and clobber unsaved edits
+      _writeTimer = setTimeout(() => { _writing = false; }, 800);
+    })
+    .catch(() => { setSyncStatus('error'); _writing = false; });
 }
 
-let _ignoreNext = false;
+let _syncReady = false;
 function startSync() {
-  _DOC.get().then(snap => {
-    if (snap.exists) {
-      const d = snap.data();
-      members     = d.members     || DEF_MEMBERS;
-      expenses    = d.expenses    || [];
-      settlements = d.settlements || [];
-      sv('rm_members', members); sv('rm_expenses', expenses); sv('rm_settlements', settlements);
+  // Use onSnapshot only — avoids the race condition where .get()
+  // resolves after a user action and overwrites in-memory state
+  _DOC.onSnapshot(snap => {
+    if (_writing) return;          // Our own write in flight — ignore
+    if (!snap.exists) {
+      // First launch: push localStorage data up to Firestore
+      persistData();
       buildLoginGrid();
       renderDash(); renderAddForm();
-    } else {
-      // First time: push current localStorage data to Firestore
-      persistData();
+      setSyncStatus('ok');
+      return;
     }
-    setSyncStatus('ok');
-  }).catch(() => setSyncStatus('error'));
-
-  _DOC.onSnapshot(snap => {
-    if (!snap.exists || snap.metadata.hasPendingWrites) return;
     const d = snap.data();
     members     = d.members     || DEF_MEMBERS;
     expenses    = d.expenses    || [];
     settlements = d.settlements || [];
     sv('rm_members', members); sv('rm_expenses', expenses); sv('rm_settlements', settlements);
-    // Re-render active section
-    const sec = document.querySelector('.section.active')?.id;
-    if (sec === 'sec-dashboard') renderDash();
-    else if (sec === 'sec-history') renderHistory();
-    else if (sec === 'sec-settle') renderSettle();
-    else if (sec === 'sec-members') renderMembers();
-    buildLoginGrid();
+
+    if (!_syncReady) {
+      // Very first snapshot — initial page load from Firestore
+      _syncReady = true;
+      buildLoginGrid();
+      renderDash(); renderAddForm();
+    } else {
+      // Change came from another device — refresh active section
+      const sec = document.querySelector('.section.active')?.id;
+      if (sec === 'sec-dashboard') renderDash();
+      else if (sec === 'sec-history') renderHistory();
+      else if (sec === 'sec-settle') renderSettle();
+      else if (sec === 'sec-members') renderMembers();
+      buildLoginGrid();
+    }
     setSyncStatus('ok');
   }, () => setSyncStatus('error'));
 }
