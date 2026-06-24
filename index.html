@@ -1867,6 +1867,20 @@ function setUndoState(enabled) {
 }
 
 // ── Personal Finance Sync Functions ──
+// Maps room emoji categories to personal finance text category names
+const ROOM_TO_PF_CAT = {
+  '🛒': 'Food',
+  '🍽️': 'Food',
+  '💡': 'Rent',
+  '🌐': 'Rent',
+  '🏠': 'Rent',
+  '🚗': 'Transport',
+  '🎮': 'Entertainment',
+  '💊': 'Health',
+  '🧹': 'Other',
+  '📦': 'Other',
+};
+
 function forwardToPersonal(expense) {
   // Syncs Ragu's share of ANY room expense he's part of — whether he paid or not.
   // Returns a Promise so callers can chain resyncPersonalLends() after it lands.
@@ -1876,6 +1890,7 @@ function forwardToPersonal(expense) {
   if (myShare < 0.005) return Promise.resolve();
   const paidByMe = expense.paidBy === PERSONAL_SYNC_USER;
   const paidByLabel = paidByMe ? '' : ' · paid by ' + expense.paidBy;
+  const pfCategory = ROOM_TO_PF_CAT[expense.category] || 'Other';
   return _PF_DOC.set({
     transactions: firebase.firestore.FieldValue.arrayUnion({
       id: 'rm_' + expense.id + '_e',
@@ -1883,7 +1898,7 @@ function forwardToPersonal(expense) {
       amount: +myShare.toFixed(2),
       date: expense.date,
       purpose: (expense.desc || '') + ' · Room' + paidByLabel,
-      category: expense.category || '📦',
+      category: pfCategory,
       subcategory: '',
       createdAt: Date.now(),
       _src: 'room'
@@ -1924,7 +1939,7 @@ async function removeSettlementIncome(settId) {
 // into personal finance. Runs once per browser (tracked in localStorage).
 function backfillPersonalExpenses() {
   if (currentUser !== PERSONAL_SYNC_USER) return;
-  if (localStorage.getItem('rm_pf_backfilled_v2')) return;
+  if (localStorage.getItem('rm_pf_backfilled_v3')) return;
   _PF_DOC.get().then(snap => {
     const existing = new Set(
       (snap.exists ? (snap.data().transactions || []) : [])
@@ -1946,19 +1961,19 @@ function backfillPersonalExpenses() {
         amount: +myShare.toFixed(2),
         date: e.date,
         purpose: (e.desc || '') + ' · Room' + (paidByMe ? '' : ' · paid by ' + e.paidBy),
-        category: e.category || '📦',
+        category: ROOM_TO_PF_CAT[e.category] || 'Other',
         subcategory: '',
         createdAt: Date.now(),
         _src: 'room'
       });
     });
-    if (!toAdd.length) { localStorage.setItem('rm_pf_backfilled_v2', '1'); return; }
+    if (!toAdd.length) { localStorage.setItem('rm_pf_backfilled_v3', '1'); return; }
     // Write all missing entries in one batch using arrayUnion per entry
     // (Firestore arrayUnion on array field — we do a set merge with the combined list)
     const all = snap.exists ? (snap.data().transactions || []) : [];
     _PF_DOC.set({ transactions: [...all, ...toAdd] }, { merge: true })
       .then(() => {
-        localStorage.setItem('rm_pf_backfilled_v2', '1');
+        localStorage.setItem('rm_pf_backfilled_v3', '1');
         toast(`Synced ${toAdd.length} past expense${toAdd.length>1?'s':''} to Personal Finance ✓`, 'success');
       }).catch(() => {});
   }).catch(() => {});
