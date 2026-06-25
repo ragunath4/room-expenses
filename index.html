@@ -1133,6 +1133,7 @@ input[type=number] { -moz-appearance: textfield; }
       <button class="nav-btn" onclick="go('add')">Add Expense</button>
       <button class="nav-btn" onclick="go('history')">History</button>
       <button class="nav-btn" onclick="go('settle')">Settle Up</button>
+      <button class="nav-btn" onclick="go('summary')">Summary</button>
       <button class="nav-btn" onclick="go('members')">Members</button>
     </nav>
     <div id="sync-dot" title="Synced" style="width:8px;height:8px;border-radius:50%;background:#2D7A4F;flex-shrink:0;transition:background 0.3s;"></div>
@@ -1149,8 +1150,12 @@ input[type=number] { -moz-appearance: textfield; }
   <section id="sec-dashboard" class="section active">
     <div id="my-card-wrap"></div>
     <div id="personal-dash-wrap"></div>
+  </section>
+
+  <!-- ── SUMMARY ── -->
+  <section id="sec-summary" class="section">
     <div class="section-header">
-      <h1 class="section-title" id="dash-section-title">Overview</h1>
+      <h1 class="section-title">Room Summary</h1>
     </div>
 
     <div class="stats-row">
@@ -1361,6 +1366,9 @@ input[type=number] { -moz-appearance: textfield; }
     </button>
     <button class="sidebar-btn" id="sb-settle" onclick="sidebarGo('settle')">
       <span class="sb-icon">✅</span> Settle Up
+    </button>
+    <button class="sidebar-btn" id="sb-summary" onclick="sidebarGo('summary')">
+      <span class="sb-icon">🏠</span> Summary
     </button>
     <button class="sidebar-btn" id="sb-members" onclick="sidebarGo('members')">
       <span class="sb-icon">👥</span> Members
@@ -1719,7 +1727,7 @@ function go(name) {
     const map = ['dashboard','add','history','settle','members'];
     b.classList.toggle('active', map[i] === name);
   });
-  const renders = {dashboard:renderDash, add:renderAddForm, history:renderHistory, settle:renderSettle, members:renderMembers};
+  const renders = {dashboard:renderDash, add:renderAddForm, history:renderHistory, settle:renderSettle, summary:renderSummary, members:renderMembers};
   renders[name]?.();
   updateSidebarActive(name);
   document.getElementById('add-fab').style.display = name === 'dashboard' ? 'flex' : 'none';
@@ -1729,8 +1737,9 @@ function go(name) {
 function renderDash() {
   renderMyCard();
   renderPersonalDash();
-  const titleEl = document.getElementById('dash-section-title');
-  if (titleEl) titleEl.textContent = currentUser ? 'Room Summary' : 'Overview';
+}
+
+function renderSummary() {
   const total = expenses.reduce((s,e) => s+e.amount, 0);
   const mo = new Date().toISOString().slice(0,7);
   const month = expenses.filter(e => (e.date||'').startsWith(mo)).reduce((s,e) => s+e.amount, 0);
