@@ -1033,6 +1033,8 @@ input[type=number] { -moz-appearance: textfield; }
 .pcard-settle-btn:hover { opacity: 0.85; transform: scale(1.05); }
 .pcard-exp-settle-btn { padding: 2px 8px; font-size: 10px; font-weight: 700; background: var(--danger); color: #fff; border: none; border-radius: 12px; cursor: pointer; flex-shrink: 0; transition: opacity 0.15s; margin-left: 4px; }
 .pcard-exp-settle-btn:hover { opacity: 0.8; }
+.pcard-exp-recv-btn { padding: 2px 8px; font-size: 10px; font-weight: 700; background: var(--success); color: #fff; border: none; border-radius: 12px; cursor: pointer; flex-shrink: 0; transition: opacity 0.15s; margin-left: 4px; }
+.pcard-exp-recv-btn:hover { opacity: 0.8; }
 .pcard-recv-btn { background: var(--accent); }
 
 /* ── Floating Calculator ── */
@@ -2278,6 +2280,7 @@ function renderPersonalDash() {
             <span class="pcard-exp-desc">${escHtml(e.desc)}</span>
             <span class="pcard-exp-date">${fmtDate(e.date)}</span>
             <span class="pcard-exp-share pcard-exp-share-rec">+${fmt(e.share)}</span>
+            <button class="pcard-exp-recv-btn" onclick="recvExpAmount(${i},${e.share})">✓</button>
           </div>`;
         });
         if (d.exps.length > 5) html += `<div class="pcard-exp-more" onclick="expandGroup('${gid}')">+ ${d.exps.length - 5} more</div>`;
@@ -2305,6 +2308,16 @@ function settleExpAmount(i, amount) {
   settlements.unshift({ id: uid(), from: currentUser, to: d.person, amount: +amount.toFixed(2), date: td() });
   persistData();
   toast(`${fmt(amount)} paid to ${d.person}! ✓`, 'success');
+  renderDash();
+}
+
+function recvExpAmount(i, amount) {
+  const d = _dashRec[i];
+  if (!d || amount < 0.01) return;
+  if (!confirm(`Mark ${fmt(amount)} received from ${d.person}?`)) return;
+  settlements.unshift({ id: uid(), from: d.person, to: currentUser, amount: +amount.toFixed(2), date: td() });
+  persistData();
+  toast(`${fmt(amount)} received from ${d.person}! ✓`, 'success');
   renderDash();
 }
 
