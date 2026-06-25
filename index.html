@@ -1990,7 +1990,10 @@ function addSettlement() {
   if (from === to)            return toast('From and To must be different people.','error');
   if (!amount || amount <= 0) return toast('Please enter a valid amount.','error');
 
-  const sett = {id:uid(), from, to, amount, date};
+  const settledExpIds = expenses
+    .filter(e => e.paidBy === to && e.splitAmong?.includes(from))
+    .map(e => e.id);
+  const sett = {id:uid(), from, to, amount, date, settledExpIds};
   settlements.unshift(sett);
   persistData();
   document.getElementById('sett-amount').value = '';
@@ -2156,33 +2159,48 @@ let _dashRec = [];
 
 function getPersonBreakdown(name) {
   const debts = pairDebts();
+
+  // Helper: collect all explicitly-settled expense IDs between two people (one direction)
+  function settledIds(from, to) {
+    return new Set(settlements
+      .filter(s => s.from === from && s.to === to)
+      .flatMap(s => s.settledExpIds || (s.expId ? [s.expId] : [])));
+  }
+
   const toPay = debts
     .filter(d => d.from === name)
     .map(d => {
-      // offsets: expenses I paid that they share in — show all (these are my own entries)
-      const offsets = expenses
-        .filter(e => e.paidBy === name && e.splitAmong?.includes(d.to))
-        .map(e => ({ id: e.id, desc: e.desc || '(no description)', cat: e.category || '📦', date: e.date || '', share: getShare(e, d.to) }))
-        .filter(e => e.share > 0)
-        .sort((a, b) => b.date.localeCompare(a.date));
-      const offsetTotal = offsets.reduce((s, e) => s + e.share, 0);
-      // their expenses: accumulate newest-first until sum = net + offsetTotal
+      const sid = settledIds(name, d.to);
+      const hasSettlement = settlements.some(s => s.from === name && s.to === d.to);
+
+      // Their expenses I still owe for — filter explicitly settled, then accumulate newest-first to net
       const allExps = expenses
-        .filter(e => e.paidBy === d.to && e.splitAmong?.includes(name))
+        .filter(e => e.paidBy === d.to && e.splitAmong?.includes(name) && !sid.has(e.id))
         .map(e => ({ id: e.id, desc: e.desc || '(no description)', cat: e.category || '📦', date: e.date || '', share: getShare(e, name) }))
         .filter(e => e.share > 0)
         .sort((a, b) => b.date.localeCompare(a.date));
       const exps = [];
-      let rem = d.amount + offsetTotal;
+      let rem = d.amount;
       for (const e of allExps) { if (rem < 0.01) break; exps.push(e); rem -= e.share; }
+
+      // Offsets: expenses I paid that they share — only show if no prior settlements
+      // (settlements absorb offsets into the settled amount)
+      const offsets = hasSettlement ? [] : expenses
+        .filter(e => e.paidBy === name && e.splitAmong?.includes(d.to))
+        .map(e => ({ id: e.id, desc: e.desc || '(no description)', cat: e.category || '📦', date: e.date || '', share: getShare(e, d.to) }))
+        .filter(e => e.share > 0)
+        .sort((a, b) => b.date.localeCompare(a.date));
+
       return { person: d.to, amount: d.amount, exps, offsets };
     })
     .filter(d => d.amount > 0.01);
+
   const toReceive = debts
     .filter(d => d.to === name)
     .map(d => {
+      const sid = settledIds(d.from, name);
       const allExps = expenses
-        .filter(e => e.paidBy === name && e.splitAmong?.includes(d.from))
+        .filter(e => e.paidBy === name && e.splitAmong?.includes(d.from) && !sid.has(e.id))
         .map(e => ({ id: e.id, desc: e.desc || '(no description)', cat: e.category || '📦', date: e.date || '', share: getShare(e, d.from) }))
         .filter(e => e.share > 0)
         .sort((a, b) => b.date.localeCompare(a.date));
