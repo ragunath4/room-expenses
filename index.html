@@ -2199,15 +2199,26 @@ function getPersonBreakdown(name) {
     .filter(d => d.to === name)
     .map(d => {
       const sid = settledIds(d.from, name);
+      const hasSettlement = settlements.some(s => s.from === d.from && s.to === name);
+
+      // Reverse offsets: their expenses that I'm in — reduce what they owe me
+      // Only show when no prior settlement (otherwise already absorbed)
+      const revOffsets = hasSettlement ? [] : expenses
+        .filter(e => e.paidBy === d.from && e.splitAmong?.includes(name))
+        .map(e => ({ id: e.id, desc: e.desc || '(no description)', cat: e.category || '📦', date: e.date || '', share: getShare(e, name) }))
+        .filter(e => e.share > 0)
+        .sort((a, b) => b.date.localeCompare(a.date));
+      const revOffsetTotal = revOffsets.reduce((s, e) => s + e.share, 0);
+
       const allExps = expenses
         .filter(e => e.paidBy === name && e.splitAmong?.includes(d.from) && !sid.has(e.id))
         .map(e => ({ id: e.id, desc: e.desc || '(no description)', cat: e.category || '📦', date: e.date || '', share: getShare(e, d.from) }))
         .filter(e => e.share > 0)
         .sort((a, b) => b.date.localeCompare(a.date));
       const exps = [];
-      let rem = d.amount;
+      let rem = d.amount + revOffsetTotal;
       for (const e of allExps) { if (rem < 0.01) break; exps.push(e); rem -= e.share; }
-      return { person: d.from, amount: d.amount, exps };
+      return { person: d.from, amount: d.amount, exps, revOffsets };
     })
     .filter(d => d.amount > 0.01);
   return { toPay, toReceive };
@@ -2295,7 +2306,7 @@ function renderPersonalDash() {
         <span class="pcard-person-amount pcard-person-amount-rec">+${fmt(d.amount)}</span>
         <button class="pcard-settle-btn pcard-recv-btn" onclick="markReceived(${i})">Received</button>
       </div>`;
-      if (d.exps.length) {
+      if (d.exps.length || (d.revOffsets && d.revOffsets.length)) {
         const gid = `pg-rec-${i}`;
         html += `<div class="pcard-exps" id="${gid}">`;
         d.exps.forEach((e, ei) => {
@@ -2307,6 +2318,16 @@ function renderPersonalDash() {
           </div>`;
         });
         if (d.exps.length > 5) html += `<div class="pcard-exp-more" onclick="expandGroup('${gid}')">+ ${d.exps.length - 5} more</div>`;
+        if (d.revOffsets && d.revOffsets.length) {
+          d.revOffsets.forEach((e, ei) => {
+            html += `<div class="pcard-exp-row pcard-exp-row-offset${ei >= 5 ? ' pcard-exp-hidden' : ''}">
+              <span class="pcard-exp-cat">${escHtml(e.cat)}</span>
+              <span class="pcard-exp-desc">${escHtml(e.desc)}</span>
+              <span class="pcard-exp-date">${fmtDate(e.date)}</span>
+              <span class="pcard-exp-share pcard-exp-share-pay">-${fmt(e.share)}</span>
+            </div>`;
+          });
+        }
         html += `</div>`;
       }
       html += `</div>`;
