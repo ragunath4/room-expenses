@@ -1174,6 +1174,11 @@ input[type=number] { -moz-appearance: textfield; }
   .calc-fab { right: 16px; bottom: 20px; }
   .add-fab { right: 16px; bottom: 84px; }
 }
+/* Mobile: lift calc above bottom nav */
+@media (max-width: 600px) {
+  .calc-fab { bottom: 78px; }
+  .calc-panel { bottom: 144px; right: 16px; width: calc(100vw - 32px); }
+}
 </style>
 </head>
 <body>
