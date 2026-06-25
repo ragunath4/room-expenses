@@ -2217,7 +2217,6 @@ function renderPersonalDash() {
         ${avEl(d.person, pi >= 0 ? pi : i)}
         <span class="pcard-person-name">${escHtml(d.person)}</span>
         <span class="pcard-person-amount pcard-person-amount-pay">${fmt(d.amount)}</span>
-        <button class="pcard-settle-btn" onclick="quickSettle(${i})">Settle</button>
       </div>`;
       if (d.exps.length || d.offsets.length) {
         const gid = `pg-pay-${i}`;
@@ -2269,7 +2268,6 @@ function renderPersonalDash() {
         ${avEl(d.person, pi >= 0 ? pi : i)}
         <span class="pcard-person-name">${escHtml(d.person)}</span>
         <span class="pcard-person-amount pcard-person-amount-rec">+${fmt(d.amount)}</span>
-        <button class="pcard-settle-btn pcard-recv-btn" onclick="markReceived(${i})">Received</button>
       </div>`;
       if (d.exps.length) {
         const gid = `pg-rec-${i}`;
@@ -2301,24 +2299,32 @@ function expandGroup(id) {
   el.querySelectorAll('.pcard-exp-more').forEach(b => b.remove());
 }
 
+let _settleInProgress = false;
+
 function settleExpAmount(i, amount) {
+  if (_settleInProgress) return;
   const d = _dashPay[i];
   if (!d || amount < 0.01) return;
   if (!confirm(`Settle ${fmt(amount)} to ${d.person}?`)) return;
+  _settleInProgress = true;
   settlements.unshift({ id: uid(), from: currentUser, to: d.person, amount: +amount.toFixed(2), date: td() });
   persistData();
   toast(`${fmt(amount)} paid to ${d.person}! ✓`, 'success');
   renderDash();
+  setTimeout(() => { _settleInProgress = false; }, 2000);
 }
 
 function recvExpAmount(i, amount) {
+  if (_settleInProgress) return;
   const d = _dashRec[i];
   if (!d || amount < 0.01) return;
   if (!confirm(`Mark ${fmt(amount)} received from ${d.person}?`)) return;
+  _settleInProgress = true;
   settlements.unshift({ id: uid(), from: d.person, to: currentUser, amount: +amount.toFixed(2), date: td() });
   persistData();
   toast(`${fmt(amount)} received from ${d.person}! ✓`, 'success');
   renderDash();
+  setTimeout(() => { _settleInProgress = false; }, 2000);
 }
 
 function quickSettle(i) {
