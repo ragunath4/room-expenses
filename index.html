@@ -2159,14 +2159,15 @@ function getPersonBreakdown(name) {
   const toPay = debts
     .filter(d => d.from === name)
     .map(d => {
+      const settledIds = new Set(settlements.filter(s => s.expId && s.from === name && s.to === d.to).map(s => s.expId));
       const exps = expenses
-        .filter(e => e.paidBy === d.to && e.splitAmong?.includes(name))
-        .map(e => ({ desc: e.desc || '(no description)', cat: e.category || '📦', date: e.date || '', share: getShare(e, name) }))
+        .filter(e => e.paidBy === d.to && e.splitAmong?.includes(name) && !settledIds.has(e.id))
+        .map(e => ({ id: e.id, desc: e.desc || '(no description)', cat: e.category || '📦', date: e.date || '', share: getShare(e, name) }))
         .filter(e => e.share > 0);
-      // expenses where YOU paid and they shared — these offset the debt
+      const offsetSettledIds = new Set(settlements.filter(s => s.expId && s.from === d.to && s.to === name).map(s => s.expId));
       const offsets = expenses
-        .filter(e => e.paidBy === name && e.splitAmong?.includes(d.to))
-        .map(e => ({ desc: e.desc || '(no description)', cat: e.category || '📦', date: e.date || '', share: getShare(e, d.to) }))
+        .filter(e => e.paidBy === name && e.splitAmong?.includes(d.to) && !offsetSettledIds.has(e.id))
+        .map(e => ({ id: e.id, desc: e.desc || '(no description)', cat: e.category || '📦', date: e.date || '', share: getShare(e, d.to) }))
         .filter(e => e.share > 0);
       return { person: d.to, amount: d.amount, exps, offsets };
     })
@@ -2174,9 +2175,10 @@ function getPersonBreakdown(name) {
   const toReceive = debts
     .filter(d => d.to === name)
     .map(d => {
+      const settledIds = new Set(settlements.filter(s => s.expId && s.from === d.from && s.to === name).map(s => s.expId));
       const exps = expenses
-        .filter(e => e.paidBy === name && e.splitAmong?.includes(d.from))
-        .map(e => ({ desc: e.desc || '(no description)', cat: e.category || '📦', date: e.date || '', share: getShare(e, d.from) }))
+        .filter(e => e.paidBy === name && e.splitAmong?.includes(d.from) && !settledIds.has(e.id))
+        .map(e => ({ id: e.id, desc: e.desc || '(no description)', cat: e.category || '📦', date: e.date || '', share: getShare(e, d.from) }))
         .filter(e => e.share > 0);
       return { person: d.from, amount: d.amount, exps };
     })
@@ -2230,7 +2232,7 @@ function renderPersonalDash() {
               <span class="pcard-exp-desc">${escHtml(e.desc)}</span>
               <span class="pcard-exp-date">${fmtDate(e.date)}</span>
               <span class="pcard-exp-share pcard-exp-share-pay">-${fmt(e.share)}</span>
-              <button class="pcard-exp-settle-btn" onclick="settleExpAmount(${i},${e.share})">Settle</button>
+              <button class="pcard-exp-settle-btn" onclick="settleExpAmount(${i},${ei})">Settle</button>
             </div>`;
           });
           if (d.exps.length > 5) html += `<div class="pcard-exp-more" onclick="expandGroup('${gid}')">+ ${d.exps.length - 5} more</div>`;
@@ -2278,7 +2280,7 @@ function renderPersonalDash() {
             <span class="pcard-exp-desc">${escHtml(e.desc)}</span>
             <span class="pcard-exp-date">${fmtDate(e.date)}</span>
             <span class="pcard-exp-share pcard-exp-share-rec">+${fmt(e.share)}</span>
-            <button class="pcard-exp-recv-btn" onclick="recvExpAmount(${i},${e.share})">✓</button>
+            <button class="pcard-exp-recv-btn" onclick="recvExpAmount(${i},${ei})">✓</button>
           </div>`;
         });
         if (d.exps.length > 5) html += `<div class="pcard-exp-more" onclick="expandGroup('${gid}')">+ ${d.exps.length - 5} more</div>`;
@@ -2301,28 +2303,30 @@ function expandGroup(id) {
 
 let _settleInProgress = false;
 
-function settleExpAmount(i, amount) {
+function settleExpAmount(i, ei) {
   if (_settleInProgress) return;
   const d = _dashPay[i];
-  if (!d || amount < 0.01) return;
-  if (!confirm(`Settle ${fmt(amount)} to ${d.person}?`)) return;
+  const e = d?.exps?.[ei];
+  if (!d || !e || e.share < 0.01) return;
+  if (!confirm(`Settle ${fmt(e.share)} to ${d.person}?`)) return;
   _settleInProgress = true;
-  settlements.unshift({ id: uid(), from: currentUser, to: d.person, amount: +amount.toFixed(2), date: td() });
+  settlements.unshift({ id: uid(), from: currentUser, to: d.person, amount: +e.share.toFixed(2), date: td(), expId: e.id });
   persistData();
-  toast(`${fmt(amount)} paid to ${d.person}! ✓`, 'success');
+  toast(`${fmt(e.share)} paid to ${d.person}! ✓`, 'success');
   renderDash();
   setTimeout(() => { _settleInProgress = false; }, 30);
 }
 
-function recvExpAmount(i, amount) {
+function recvExpAmount(i, ei) {
   if (_settleInProgress) return;
   const d = _dashRec[i];
-  if (!d || amount < 0.01) return;
-  if (!confirm(`Mark ${fmt(amount)} received from ${d.person}?`)) return;
+  const e = d?.exps?.[ei];
+  if (!d || !e || e.share < 0.01) return;
+  if (!confirm(`Mark ${fmt(e.share)} received from ${d.person}?`)) return;
   _settleInProgress = true;
-  settlements.unshift({ id: uid(), from: d.person, to: currentUser, amount: +amount.toFixed(2), date: td() });
+  settlements.unshift({ id: uid(), from: d.person, to: currentUser, amount: +e.share.toFixed(2), date: td(), expId: e.id });
   persistData();
-  toast(`${fmt(amount)} received from ${d.person}! ✓`, 'success');
+  toast(`${fmt(e.share)} received from ${d.person}! ✓`, 'success');
   renderDash();
   setTimeout(() => { _settleInProgress = false; }, 30);
 }
