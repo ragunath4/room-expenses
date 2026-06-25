@@ -2159,33 +2159,28 @@ function getPersonBreakdown(name) {
   const toPay = debts
     .filter(d => d.from === name)
     .map(d => {
-      const settledIds = new Set(settlements
-        .filter(s => s.from === name && s.to === d.to)
-        .flatMap(s => s.expId ? [s.expId] : (s.settledExpIds || [])));
-      const exps = expenses
-        .filter(e => e.paidBy === d.to && e.splitAmong?.includes(name) && !settledIds.has(e.id))
+      const allExps = expenses
+        .filter(e => e.paidBy === d.to && e.splitAmong?.includes(name))
         .map(e => ({ id: e.id, desc: e.desc || '(no description)', cat: e.category || '📦', date: e.date || '', share: getShare(e, name) }))
-        .filter(e => e.share > 0);
-      const offsetSettledIds = new Set(settlements
-        .filter(s => s.from === d.to && s.to === name)
-        .flatMap(s => s.expId ? [s.expId] : (s.settledExpIds || [])));
-      const offsets = expenses
-        .filter(e => e.paidBy === name && e.splitAmong?.includes(d.to) && !offsetSettledIds.has(e.id))
-        .map(e => ({ id: e.id, desc: e.desc || '(no description)', cat: e.category || '📦', date: e.date || '', share: getShare(e, d.to) }))
-        .filter(e => e.share > 0);
+        .filter(e => e.share > 0)
+        .sort((a, b) => b.date.localeCompare(a.date));
+      const exps = [], offsets = [];
+      let rem = d.amount;
+      for (const e of allExps) { if (rem < 0.01) break; exps.push(e); rem -= e.share; }
       return { person: d.to, amount: d.amount, exps, offsets };
     })
     .filter(d => d.amount > 0.01);
   const toReceive = debts
     .filter(d => d.to === name)
     .map(d => {
-      const settledIds = new Set(settlements
-        .filter(s => s.from === d.from && s.to === name)
-        .flatMap(s => s.expId ? [s.expId] : (s.settledExpIds || [])));
-      const exps = expenses
-        .filter(e => e.paidBy === name && e.splitAmong?.includes(d.from) && !settledIds.has(e.id))
+      const allExps = expenses
+        .filter(e => e.paidBy === name && e.splitAmong?.includes(d.from))
         .map(e => ({ id: e.id, desc: e.desc || '(no description)', cat: e.category || '📦', date: e.date || '', share: getShare(e, d.from) }))
-        .filter(e => e.share > 0);
+        .filter(e => e.share > 0)
+        .sort((a, b) => b.date.localeCompare(a.date));
+      const exps = [];
+      let rem = d.amount;
+      for (const e of allExps) { if (rem < 0.01) break; exps.push(e); rem -= e.share; }
       return { person: d.from, amount: d.amount, exps };
     })
     .filter(d => d.amount > 0.01);
