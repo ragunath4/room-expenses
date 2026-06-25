@@ -2159,12 +2159,16 @@ function getPersonBreakdown(name) {
   const toPay = debts
     .filter(d => d.from === name)
     .map(d => {
-      const settledIds = new Set(settlements.filter(s => s.expId && s.from === name && s.to === d.to).map(s => s.expId));
+      const settledIds = new Set(settlements
+        .filter(s => s.from === name && s.to === d.to)
+        .flatMap(s => s.expId ? [s.expId] : (s.settledExpIds || [])));
       const exps = expenses
         .filter(e => e.paidBy === d.to && e.splitAmong?.includes(name) && !settledIds.has(e.id))
         .map(e => ({ id: e.id, desc: e.desc || '(no description)', cat: e.category || '📦', date: e.date || '', share: getShare(e, name) }))
         .filter(e => e.share > 0);
-      const offsetSettledIds = new Set(settlements.filter(s => s.expId && s.from === d.to && s.to === name).map(s => s.expId));
+      const offsetSettledIds = new Set(settlements
+        .filter(s => s.from === d.to && s.to === name)
+        .flatMap(s => s.expId ? [s.expId] : (s.settledExpIds || [])));
       const offsets = expenses
         .filter(e => e.paidBy === name && e.splitAmong?.includes(d.to) && !offsetSettledIds.has(e.id))
         .map(e => ({ id: e.id, desc: e.desc || '(no description)', cat: e.category || '📦', date: e.date || '', share: getShare(e, d.to) }))
@@ -2175,7 +2179,9 @@ function getPersonBreakdown(name) {
   const toReceive = debts
     .filter(d => d.to === name)
     .map(d => {
-      const settledIds = new Set(settlements.filter(s => s.expId && s.from === d.from && s.to === name).map(s => s.expId));
+      const settledIds = new Set(settlements
+        .filter(s => s.from === d.from && s.to === name)
+        .flatMap(s => s.expId ? [s.expId] : (s.settledExpIds || [])));
       const exps = expenses
         .filter(e => e.paidBy === name && e.splitAmong?.includes(d.from) && !settledIds.has(e.id))
         .map(e => ({ id: e.id, desc: e.desc || '(no description)', cat: e.category || '📦', date: e.date || '', share: getShare(e, d.from) }))
@@ -2330,7 +2336,8 @@ function recvExpAmount(i, ei) {
 function quickSettle(i) {
   const d = _dashPay[i];
   if (!d || d.amount < 0.01) return;
-  settlements.unshift({ id: uid(), from: currentUser, to: d.person, amount: d.amount, date: td() });
+  const settledExpIds = d.exps.map(e => e.id);
+  settlements.unshift({ id: uid(), from: currentUser, to: d.person, amount: d.amount, date: td(), settledExpIds });
   persistData();
   toast(`${fmt(d.amount)} paid to ${d.person}! ✓`, 'success');
   renderDash();
@@ -2339,8 +2346,8 @@ function quickSettle(i) {
 function markReceived(i) {
   const d = _dashRec[i];
   if (!d || d.amount < 0.01) return;
-  const sett = { id: uid(), from: d.person, to: currentUser, amount: d.amount, date: td() };
-  settlements.unshift(sett);
+  const settledExpIds = d.exps.map(e => e.id);
+  settlements.unshift({ id: uid(), from: d.person, to: currentUser, amount: d.amount, date: td(), settledExpIds });
   persistData();
   toast(`${fmt(d.amount)} received from ${d.person}! ✓`, 'success');
   renderDash();
