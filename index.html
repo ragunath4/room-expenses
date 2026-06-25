@@ -1516,8 +1516,9 @@ input[type=number] { -moz-appearance: textfield; }
     <button class="ck" onclick="calcPress('3')">3</button>
     <button class="ck ck-op" onclick="calcPress('+')">+</button>
 
-    <button class="ck ck-zero" onclick="calcPress('0')">0</button>
+    <button class="ck" onclick="calcPress('0')">0</button>
     <button class="ck" onclick="calcPress('.')">.</button>
+    <button class="ck ck-fn" onclick="calcPress('⌫')">⌫</button>
     <button class="ck ck-eq" onclick="calcPress('=')">=</button>
   </div>
 </div>
@@ -3077,6 +3078,9 @@ function calcPress(k) {
     _calcVal   = r === 'Error' ? 'Error' : String(parseFloat(r.toFixed(10)));
     _calcOp    = null; _calcPrev  = null; _calcFresh = false;
     document.querySelectorAll('.ck-op').forEach(b => b.classList.remove('lit'));
+  } else if (k === '⌫') {
+    if (_calcFresh || _calcVal === '0' || _calcVal === 'Error') return;
+    _calcVal = _calcVal.length > 1 ? _calcVal.slice(0, -1) : '0';
   } else if (k === '.') {
     if (_calcFresh) { _calcVal = '0.'; _calcFresh = false; }
     else if (!_calcVal.includes('.')) _calcVal += '.';
@@ -3093,7 +3097,7 @@ document.addEventListener('keydown', e => {
   const panel = document.getElementById('calc-panel');
   if (!panel.classList.contains('open')) return;
   const map = {'0':'0','1':'1','2':'2','3':'3','4':'4','5':'5','6':'6','7':'7','8':'8','9':'9',
-    '.':'.','Enter':'=','=':'=','Backspace':'AC','Escape':'AC',
+    '.':'.','Enter':'=','=':'=','Backspace':'⌫','Escape':'AC',
     '/':'÷','*':'×','-':'−','+':'+'};
   if (map[e.key]) { e.preventDefault(); calcPress(map[e.key]); }
 });
