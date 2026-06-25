@@ -630,7 +630,7 @@ input[type=number] { -moz-appearance: textfield; }
 }
 .sidebar-btn:hover { background: rgba(255,255,255,0.07); color: #F7F3EC; }
 .sidebar-btn.active { background: rgba(201,132,26,0.15); color: var(--accent); }
-.sidebar-btn .sb-icon { font-size: 18px; width: 24px; text-align: center; flex-shrink: 0; }
+.sidebar-btn .sb-icon { width: 18px; height: 18px; flex-shrink: 0; }
 .sidebar-user {
   padding: 16px 22px 24px;
   border-top: 1px solid rgba(255,255,255,0.08);
@@ -1454,22 +1454,22 @@ input[type=number] { -moz-appearance: textfield; }
   <div class="sidebar-logo">The <em>Ledger</em></div>
   <nav class="sidebar-nav">
     <button class="sidebar-btn active" id="sb-dashboard" onclick="sidebarGo('dashboard')">
-      <span class="sb-icon">📊</span> Dashboard
+      <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/><path d="M9 21V12h6v9"/></svg> Dashboard
     </button>
     <button class="sidebar-btn" id="sb-add" onclick="sidebarGo('add')">
-      <span class="sb-icon">➕</span> Add Expense
+      <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg> Add Expense
     </button>
     <button class="sidebar-btn" id="sb-history" onclick="sidebarGo('history')">
-      <span class="sb-icon">📋</span> History
+      <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="12" y2="16"/></svg> History
     </button>
     <button class="sidebar-btn" id="sb-settle" onclick="sidebarGo('settle')">
-      <span class="sb-icon">✅</span> Settle Up
+      <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M7.5 12l3 3 6-6"/></svg> Settle Up
     </button>
     <button class="sidebar-btn" id="sb-summary" onclick="sidebarGo('summary')">
-      <span class="sb-icon">🏠</span> Summary
+      <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> Summary
     </button>
     <button class="sidebar-btn" id="sb-members" onclick="sidebarGo('members')">
-      <span class="sb-icon">👥</span> Members
+      <svg class="sb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/><path d="M16 3.13a4 4 0 010 7.75"/><path d="M21 21v-2a4 4 0 00-3-3.87"/></svg> Members
     </button>
   </nav>
   <div class="sidebar-user">
@@ -1541,7 +1541,7 @@ input[type=number] { -moz-appearance: textfield; }
   <div class="modal-box">
     <div class="modal-title">Import Expenses</div>
     <div class="modal-sub">From Excel (.xlsx) or CSV file exported from this app</div>
-    <div class="import-stat" id="import-stat">📊 0 expenses found</div>
+    <div class="import-stat" id="import-stat">0 expenses found</div>
     <div class="import-preview" id="import-preview"></div>
     <div style="font-size:11px;font-weight:700;letter-spacing:0.7px;text-transform:uppercase;color:var(--text2);margin-bottom:8px;">Import Mode</div>
     <div class="import-mode-row">
@@ -1615,7 +1615,7 @@ input[type=number] { -moz-appearance: textfield; }
       </div>
     </div>
     <div class="modal-actions" style="justify-content:space-between;">
-      <button class="btn btn-danger btn-sm" onclick="deleteFromEdit()">🗑 Delete</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteFromEdit()" style="display:flex;align-items:center;gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg> Delete</button>
       <div style="display:flex;gap:10px;">
         <button class="btn btn-secondary btn-sm" onclick="closeEditModal()">Cancel</button>
         <button class="btn btn-primary btn-sm" onclick="saveEdit()">Save Changes</button>
@@ -1868,7 +1868,7 @@ function renderSummary() {
   const debts = pairDebts();
   const dl = document.getElementById('debts-list');
   if (!debts.length) {
-    dl.innerHTML = '<div class="empty"><div class="empty-icon">🎉</div><div class="empty-text">Everyone is settled up!</div></div>';
+    dl.innerHTML = '<div class="empty"><div class="empty-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M7.5 12l3 3 6-6"/></svg></div><div class="empty-text">Everyone is settled up!</div></div>';
   } else {
     dl.innerHTML = debts.map(d => `<div class="debt-item">
       <span class="debt-desc"><strong>${escHtml(d.from)}</strong> pays <strong>${escHtml(d.to)}</strong></span>
@@ -2039,7 +2039,7 @@ function renderHistory() {
   if (selP !== 'all') list = list.filter(e => e.paidBy === selP);
   const ul = document.getElementById('expense-list');
   if (!list.length) {
-    ul.innerHTML = '<li class="empty"><div class="empty-icon">📋</div><div class="empty-text">No expenses found.</div></li>';
+    ul.innerHTML = '<li class="empty"><div class="empty-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="12" y2="16"/></svg></div><div class="empty-text">No expenses found.</div></li>';
     return;
   }
   ul.innerHTML = list.map(e => {
@@ -2095,7 +2095,7 @@ function renderSettle() {
 
   const sh = document.getElementById('sett-history');
   if (!settlements.length) {
-    sh.innerHTML = '<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">No settlements recorded yet.</div></div>';
+    sh.innerHTML = '<div class="empty"><div class="empty-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M7.5 12l3 3 6-6"/></svg></div><div class="empty-text">No settlements recorded yet.</div></div>';
     return;
   }
   sh.innerHTML = settlements.map((s, i) => `<div class="sett-item">
@@ -2377,14 +2377,14 @@ function renderPersonalDash() {
   // You Need to Pay
   if (!toPay.length) {
     html += `<div class="card pcard"><div class="pcard-all-clear">
-      <div style="font-size:32px">🎉</div>
+      <div style="color:var(--success);margin-bottom:4px"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M7.5 12l3 3 6-6"/></svg></div>
       <div style="font-weight:700;color:var(--success)">You don't owe anyone!</div>
       <div style="font-size:13px;color:var(--text2)">All clear on your end</div>
     </div></div>`;
   } else {
     const totalPay = toPay.reduce((s, d) => s + d.amount, 0);
     html += `<div class="card pcard"><div class="pcard-head">
-      <div class="pcard-head-left"><span style="font-size:18px">💸</span><span class="pcard-title">You Need to Pay</span></div>
+      <div class="pcard-head-left"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 000 4h4a2 2 0 010 4H8"/><line x1="12" y1="6" x2="12" y2="8"/><line x1="12" y1="16" x2="12" y2="18"/></svg><span class="pcard-title">You Need to Pay</span></div>
       <span class="pcard-total pcard-total-pay">${fmt(totalPay)}</span>
     </div>`;
     toPay.forEach((d, i) => {
@@ -2431,7 +2431,7 @@ function renderPersonalDash() {
   if (toReceive.length) {
     const totalRec = toReceive.reduce((s, d) => s + d.amount, 0);
     html += `<div class="card pcard"><div class="pcard-head">
-      <div class="pcard-head-left"><span style="font-size:18px">💰</span><span class="pcard-title">You'll Receive</span></div>
+      <div class="pcard-head-left"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg><span class="pcard-title">You'll Receive</span></div>
       <span class="pcard-total pcard-total-rec">+${fmt(totalRec)}</span>
     </div>`;
     toReceive.forEach((d, i) => {
