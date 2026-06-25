@@ -1264,6 +1264,9 @@ input[type=number] { -moz-appearance: textfield; }
         <select id="hist-filter" onchange="renderHistory()" style="padding:8px 14px;width:auto;">
           <option value="all">All Members</option>
         </select>
+        <select id="hist-paidby-filter" onchange="renderHistory()" style="padding:8px 14px;width:auto;">
+          <option value="all">Paid By: Anyone</option>
+        </select>
         <button class="btn btn-secondary btn-sm" onclick="downloadCSV()">⬇ Download Excel</button>
         <button class="btn btn-secondary btn-sm" onclick="triggerImport()">⬆ Import Excel</button>
         <input type="file" id="import-file" accept=".csv,.xlsx,.xls" style="display:none" onchange="handleImportFile(this)">
@@ -1905,8 +1908,15 @@ function renderHistory() {
   f.innerHTML = `<option value="all">All Members</option>` + members.map(m => `<option value="${escHtml(m)}"${m===cur?' selected':''}>${escHtml(m)}</option>`).join('');
   if (cur && cur !== 'all') f.value = cur;
 
+  const fp = document.getElementById('hist-paidby-filter');
+  const curP = fp.value;
+  fp.innerHTML = `<option value="all">Paid By: Anyone</option>` + members.map(m => `<option value="${escHtml(m)}"${m===curP?' selected':''}>${escHtml(m)}</option>`).join('');
+  if (curP && curP !== 'all') fp.value = curP;
+
   const sel = f.value;
-  const list = sel === 'all' ? expenses : expenses.filter(e => e.paidBy===sel || e.splitAmong?.includes(sel));
+  const selP = fp.value;
+  let list = sel === 'all' ? expenses : expenses.filter(e => e.paidBy===sel || e.splitAmong?.includes(sel));
+  if (selP !== 'all') list = list.filter(e => e.paidBy === selP);
   const ul = document.getElementById('expense-list');
   if (!list.length) {
     ul.innerHTML = '<li class="empty"><div class="empty-icon">📋</div><div class="empty-text">No expenses found.</div></li>';
@@ -1940,7 +1950,7 @@ function renderHistory() {
 }
 
 function filterHistBy(name) {
-  const f = document.getElementById('hist-filter');
+  const f = document.getElementById('hist-paidby-filter');
   f.value = name;
   renderHistory();
 }
