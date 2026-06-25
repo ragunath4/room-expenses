@@ -2311,7 +2311,7 @@ function settleExpAmount(i, amount) {
   persistData();
   toast(`${fmt(amount)} paid to ${d.person}! ✓`, 'success');
   renderDash();
-  setTimeout(() => { _settleInProgress = false; }, 2000);
+  setTimeout(() => { _settleInProgress = false; }, 30);
 }
 
 function recvExpAmount(i, amount) {
@@ -2324,7 +2324,7 @@ function recvExpAmount(i, amount) {
   persistData();
   toast(`${fmt(amount)} received from ${d.person}! ✓`, 'success');
   renderDash();
-  setTimeout(() => { _settleInProgress = false; }, 2000);
+  setTimeout(() => { _settleInProgress = false; }, 30);
 }
 
 function quickSettle(i) {
