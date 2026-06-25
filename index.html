@@ -1927,7 +1927,7 @@ function renderHistory() {
       <div class="expense-icon">${e.category||'📦'}</div>
       <div class="expense-info">
         <div class="expense-desc">${escHtml(e.desc)}</div>
-        <div class="expense-meta">Paid by <span style="color:${c.fg};font-weight:700">${escHtml(e.paidBy)}</span> · ${e.date||''}</div>
+        <div class="expense-meta">Paid by <span style="color:${c.fg};font-weight:700;cursor:pointer;text-decoration:underline dotted;" onclick="filterHistBy('${escHtml(e.paidBy)}')">${escHtml(e.paidBy)}</span> · ${e.date||''}</div>
         <div class="expense-split">${splitDetail}</div>
       </div>
       <div class="expense-right">
@@ -1937,6 +1937,12 @@ function renderHistory() {
       <button class="edit-btn" onclick="openEditModal('${e.id}')" title="Edit expense">✎</button>
     </li>`;
   }).join('');
+}
+
+function filterHistBy(name) {
+  const f = document.getElementById('hist-filter');
+  f.value = name;
+  renderHistory();
 }
 
 function delExpense(id) {
