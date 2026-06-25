@@ -636,9 +636,73 @@ input[type=number] { -moz-appearance: textfield; }
   border-top: 1px solid rgba(255,255,255,0.08);
 }
 
+/* ── Bottom nav (mobile) ── */
+.bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 200;
+  background: var(--text);
+  border-top: 1px solid rgba(255,255,255,0.08);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.bottom-nav-inner {
+  display: flex;
+  align-items: stretch;
+  height: 62px;
+}
+.bn-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: #8A8680;
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  gap: 3px;
+  cursor: pointer;
+  transition: color 0.15s;
+  padding: 0 2px;
+  position: relative;
+}
+.bn-btn.active { color: var(--accent); }
+.bn-icon { font-size: 20px; line-height: 1; }
+
+/* Centre FAB add button */
+.bn-btn.bn-add {
+  flex: 0 0 72px;
+}
+.bn-add-fab {
+  width: 52px; height: 52px;
+  background: var(--accent);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  line-height: 1;
+  color: #fff;
+  margin-bottom: 2px;
+  box-shadow: 0 4px 16px rgba(201,132,26,0.45);
+  transition: transform 0.15s, box-shadow 0.15s;
+  margin-top: -18px;
+}
+.bn-btn.bn-add:active .bn-add-fab,
+.bn-btn.bn-add.active .bn-add-fab {
+  transform: scale(0.93);
+  box-shadow: 0 2px 8px rgba(201,132,26,0.3);
+}
+.bn-add-label { font-size: 10px; font-weight: 700; letter-spacing: 0.4px; color: #8A8680; }
+.bn-btn.bn-add.active .bn-add-label { color: var(--accent); }
+
 /* ── Responsive fixes ── */
 @media (max-width: 600px) {
-  .main { padding: 20px 14px; }
+  .main { padding: 20px 14px 90px; }
   .card { padding: 16px 14px; }
   .form-grid { grid-template-columns: 1fr; }
   .stats-row { grid-template-columns: 1fr 1fr; }
@@ -653,17 +717,18 @@ input[type=number] { -moz-appearance: textfield; }
   .my-card { padding: 16px; }
   .my-card-name { font-size: 18px; }
   .header-inner { gap: 8px; }
-  .nav-btn { padding: 18px 10px 16px; font-size: 11px; letter-spacing: 0.4px; }
   .user-pill-name { display: none; }
   .user-pill { padding: 5px 8px 5px 6px; }
-  /* Mobile: hide top nav, show hamburger + compact title */
+  /* Mobile: hide top nav + hamburger/sidebar, show bottom nav */
   .nav { display: none; }
-  .logo { display: none; }
-  .hamburger { display: flex; }
-  .mobile-title { display: block !important; }
+  .logo { font-size: 16px; }
+  .hamburger { display: none !important; }
+  .mobile-title { display: none !important; }
   .header-inner { justify-content: space-between; }
-  /* Sync dot tucked inside user pill area on mobile */
   #sync-dot { display: none; }
+  .bottom-nav { display: block; }
+  /* Hide the old FAB since bottom nav has Add */
+  #add-fab { display: none !important; }
 }
 
 /* ── Split type toggle ── */
@@ -1350,6 +1415,28 @@ input[type=number] { -moz-appearance: textfield; }
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<!-- ── BOTTOM NAV (mobile) ── -->
+<nav class="bottom-nav" id="bottom-nav">
+  <div class="bottom-nav-inner">
+    <button class="bn-btn active" id="bn-dashboard" onclick="go('dashboard')">
+      <span class="bn-icon">🏠</span>Dashboard
+    </button>
+    <button class="bn-btn" id="bn-history" onclick="go('history')">
+      <span class="bn-icon">📋</span>History
+    </button>
+    <button class="bn-btn bn-add" id="bn-add" onclick="go('add')">
+      <div class="bn-add-fab">＋</div>
+      <span class="bn-add-label">Add</span>
+    </button>
+    <button class="bn-btn" id="bn-settle" onclick="go('settle')">
+      <span class="bn-icon">✅</span>Settle Up
+    </button>
+    <button class="bn-btn" id="bn-summary" onclick="go('summary')">
+      <span class="bn-icon">📊</span>Summary
+    </button>
+  </div>
+</nav>
+
 <!-- ── LEFT SIDEBAR ── -->
 <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
 <div class="sidebar" id="sidebar">
@@ -1727,10 +1814,15 @@ function go(name) {
     const map = ['dashboard','add','history','settle','members'];
     b.classList.toggle('active', map[i] === name);
   });
+  // Update bottom nav active state
+  document.querySelectorAll('.bn-btn').forEach(b => {
+    b.classList.toggle('active', b.id === 'bn-' + name);
+  });
   const renders = {dashboard:renderDash, add:renderAddForm, history:renderHistory, settle:renderSettle, summary:renderSummary, members:renderMembers};
   renders[name]?.();
   updateSidebarActive(name);
-  document.getElementById('add-fab').style.display = name === 'dashboard' ? 'flex' : 'none';
+  const fab = document.getElementById('add-fab');
+  if (fab) fab.style.display = name === 'dashboard' ? 'flex' : 'none';
 }
 
 // ── Dashboard ──
