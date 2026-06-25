@@ -2159,13 +2159,21 @@ function getPersonBreakdown(name) {
   const toPay = debts
     .filter(d => d.from === name)
     .map(d => {
+      // offsets: expenses I paid that they share in — show all (these are my own entries)
+      const offsets = expenses
+        .filter(e => e.paidBy === name && e.splitAmong?.includes(d.to))
+        .map(e => ({ id: e.id, desc: e.desc || '(no description)', cat: e.category || '📦', date: e.date || '', share: getShare(e, d.to) }))
+        .filter(e => e.share > 0)
+        .sort((a, b) => b.date.localeCompare(a.date));
+      const offsetTotal = offsets.reduce((s, e) => s + e.share, 0);
+      // their expenses: accumulate newest-first until sum = net + offsetTotal
       const allExps = expenses
         .filter(e => e.paidBy === d.to && e.splitAmong?.includes(name))
         .map(e => ({ id: e.id, desc: e.desc || '(no description)', cat: e.category || '📦', date: e.date || '', share: getShare(e, name) }))
         .filter(e => e.share > 0)
         .sort((a, b) => b.date.localeCompare(a.date));
-      const exps = [], offsets = [];
-      let rem = d.amount;
+      const exps = [];
+      let rem = d.amount + offsetTotal;
       for (const e of allExps) { if (rem < 0.01) break; exps.push(e); rem -= e.share; }
       return { person: d.to, amount: d.amount, exps, offsets };
     })
