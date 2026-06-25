@@ -2221,6 +2221,33 @@ function renderPersonalDash() {
         <span class="pcard-person-amount pcard-person-amount-pay">${fmt(d.amount)}</span>
         <button class="pcard-settle-btn" onclick="quickSettle(${i})">Settle</button>
       </div>`;
+      if (d.exps.length || d.offsets.length) {
+        const gid = `pg-pay-${i}`;
+        html += `<div class="pcard-exps" id="${gid}">`;
+        if (d.exps.length) {
+          d.exps.forEach((e, ei) => {
+            html += `<div class="pcard-exp-row${ei >= 5 ? ' pcard-exp-hidden' : ''}">
+              <span class="pcard-exp-cat">${escHtml(e.cat)}</span>
+              <span class="pcard-exp-desc">${escHtml(e.desc)}</span>
+              <span class="pcard-exp-date">${fmtDate(e.date)}</span>
+              <span class="pcard-exp-share pcard-exp-share-pay">-${fmt(e.share)}</span>
+            </div>`;
+          });
+          if (d.exps.length > 5) html += `<div class="pcard-exp-more" onclick="expandGroup('${gid}')">+ ${d.exps.length - 5} more</div>`;
+        }
+        if (d.offsets.length) {
+          d.offsets.forEach((e, ei) => {
+            html += `<div class="pcard-exp-row pcard-exp-row-offset${ei >= 5 ? ' pcard-exp-hidden' : ''}">
+              <span class="pcard-exp-cat">${escHtml(e.cat)}</span>
+              <span class="pcard-exp-desc">${escHtml(e.desc)}</span>
+              <span class="pcard-exp-date">${fmtDate(e.date)}</span>
+              <span class="pcard-exp-share pcard-exp-share-rec">+${fmt(e.share)}</span>
+            </div>`;
+          });
+          if (d.offsets.length > 5) html += `<div class="pcard-exp-more" onclick="expandGroup('${gid}')">+ ${d.offsets.length - 5} more</div>`;
+        }
+        html += `</div>`;
+      }
       html += `</div>`;
     });
     html += `</div>`;
@@ -2241,6 +2268,20 @@ function renderPersonalDash() {
         <span class="pcard-person-amount pcard-person-amount-rec">+${fmt(d.amount)}</span>
         <button class="pcard-settle-btn pcard-recv-btn" onclick="markReceived(${i})">Received</button>
       </div>`;
+      if (d.exps.length) {
+        const gid = `pg-rec-${i}`;
+        html += `<div class="pcard-exps" id="${gid}">`;
+        d.exps.forEach((e, ei) => {
+          html += `<div class="pcard-exp-row${ei >= 5 ? ' pcard-exp-hidden' : ''}">
+            <span class="pcard-exp-cat">${escHtml(e.cat)}</span>
+            <span class="pcard-exp-desc">${escHtml(e.desc)}</span>
+            <span class="pcard-exp-date">${fmtDate(e.date)}</span>
+            <span class="pcard-exp-share pcard-exp-share-rec">+${fmt(e.share)}</span>
+          </div>`;
+        });
+        if (d.exps.length > 5) html += `<div class="pcard-exp-more" onclick="expandGroup('${gid}')">+ ${d.exps.length - 5} more</div>`;
+        html += `</div>`;
+      }
       html += `</div>`;
     });
     html += `</div>`;
